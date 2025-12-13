@@ -61,17 +61,17 @@ const int LED[8] = {LED1, LED2, LED3, LED4, LED5, LED6, LED7, LED8};
 
 //  PWM
 // FL
-#define FL_FWD PC6
-#define FL_REV PC7
+#define FL_FWD PC7
+#define FL_REV PC6
 // BL
-#define BL_FWD PC8
-#define BL_REV PC9
+#define BL_FWD PC9
+#define BL_REV PC8
 // BR
-#define BR_FWD PA8
-#define BR_REV PA9
+#define BR_FWD PA9
+#define BR_REV PA8
 // FR
-#define FR_FWD PA10
-#define FR_REV PA11
+#define FR_FWD PA11
+#define FR_REV PA10
 //   Dribble
 #define TIM4_CH1 PB6
 #define TIM4_CH2 PB7
@@ -116,12 +116,14 @@ struct Ball {
 const float BALL_THRESHOLD = 280.0;
 
 // PID
-float Kp = 0.008;
+float Kp = 0.01;
 float Ki = 0.00025;
 float Kd = 0.002;
 
 float errI = 0.0;
 float prevErr = 0.0;
+
+unsigned long prevTime = 0;
 
 // define functions
 void writeEEPROM(int addr, byte data);
@@ -293,7 +295,16 @@ void loop() {
     }
 
     // move
-    move_motor(speed, moveAngle, angle, tarAngle);
+    // read line angle
+    LineAngle = getLine();
+    if (!(LineAngle == -1.0)) {
+      moveAngle = LineAngle;
+      speed = 0.8;
+      move_motor(speed, moveAngle, angle, tarAngle);
+      delay(100);
+    } else {
+      move_motor(speed, moveAngle, angle, tarAngle);
+    }
   }
 
 }
@@ -420,22 +431,46 @@ Ball getBall() {
 }
 
 float getLine() {
-  SerialLine.println(LINE_INFO, HEX);
-  ;
+  float A = 0.0;
+  SerialLine.write(LINE_INFO);
+  SerialPC.println("getLine now");
+
+  byte buffer[4];
+  SerialLine.readBytes(buffer, 4);
+  SerialPC.print(buffer[0]);
+  SerialPC.print(" ");
+  SerialPC.print(buffer[1]);
+  SerialPC.print(" ");
+  SerialPC.print(buffer[2]);
+  SerialPC.print(" ");
+  SerialPC.println(buffer[3]);
+  memcpy(&A, buffer, 4);
+
+  return A;
 }
 
 void move_motor(float speed, float moveDeg, float heading, float tarHeading) {
+  //P計算
   float err = tarHeading - heading;
   if (err > 180) err -= 360;
   if (err < -180) err += 360;
 
-  float omega = Kp * err;
-  omega = constrain(omega, -0.3f, 0.3f);
+  //D計算
+  unsigned long now = millis();
+  float dt = (now - prevTime) / 1000.0f;
+  if (dt <= 0.0f) dt = 0.000001f;
+  float D = (err - prevErr) / dt;
+  prevTime = now;
+  prevErr = err;
 
-  float v_fr = sin((float)radians(moveDeg - 45.0)) * speed + omega;
-  float v_br = sin((float)radians(moveDeg - 135.0)) * speed + omega;
-  float v_bl = sin((float)radians(moveDeg - 225.0)) * speed + omega;
-  float v_fl = sin((float)radians(moveDeg - 315.0)) * speed + omega;
+  //PD計算
+  float PID = Kp * err + Kd * D;;
+  PID = constrain(PID, -0.5f, 0.5f);
+
+  float v_fr = sin((float)radians(moveDeg - 45.0)) * speed + PID;
+  float v_br = sin((float)radians(moveDeg - 135.0)) * speed + PID;
+  float v_bl = sin((float)radians(moveDeg - 225.0)) * speed + PID;
+  float v_fl = sin((float)radians(moveDeg - 315.0)) * speed + PID;
 
   setMotor(v_fl, FL_FWD, FL_REV);
   setMotor(v_fr, FR_FWD, FR_REV);
