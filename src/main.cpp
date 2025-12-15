@@ -61,17 +61,17 @@ const int LED[8] = {LED1, LED2, LED3, LED4, LED5, LED6, LED7, LED8};
 
 //  PWM
 // FL
-#define FL_FWD PC7
-#define FL_REV PC6
+#define FL_FWD PC6
+#define FL_REV PC7
 // BL
-#define BL_FWD PC9
-#define BL_REV PC8
+#define BL_FWD PC8
+#define BL_REV PC9
 // BR
-#define BR_FWD PA9
-#define BR_REV PA8
+#define BR_FWD PA8
+#define BR_REV PA9
 // FR
-#define FR_FWD PA11
-#define FR_REV PA10
+#define FR_FWD PA10
+#define FR_REV PA11
 //   Dribble
 #define TIM4_CH1 PB6
 #define TIM4_CH2 PB7
@@ -103,7 +103,7 @@ bool catching = false;
 int menu = 0;
 const unsigned char memuDisplay[] = {};
 
-#define SPEED 0.6
+#define SPEED 0.5
 
 #define LINE_INIT 0xAD
 #define LINE_INFO 0xAE
@@ -116,7 +116,7 @@ struct Ball {
 const float BALL_THRESHOLD = 280.0;
 
 // PID
-float Kp = 0.01;
+float Kp = 0.02;
 float Ki = 0.00025;
 float Kd = 0.002;
 
@@ -297,14 +297,15 @@ void loop() {
     // move
     // read line angle
     LineAngle = getLine();
-    if (!(LineAngle == -1.0)) {
+    /*
+    while (!(LineAngle == -1.0)) {
       moveAngle = LineAngle;
       speed = 0.8;
       move_motor(speed, moveAngle, angle, tarAngle);
-      delay(100);
-    } else {
-      move_motor(speed, moveAngle, angle, tarAngle);
+      LineAngle = getLine();
     }
+    */
+    move_motor(speed, moveAngle, angle, tarAngle);
   }
 
 }
@@ -433,10 +434,11 @@ Ball getBall() {
 float getLine() {
   float A = 0.0;
   SerialLine.write(LINE_INFO);
-  SerialPC.println("getLine now");
+  //SerialPC.println("getLine now");
 
   byte buffer[4];
   SerialLine.readBytes(buffer, 4);
+  /*
   SerialPC.print(buffer[0]);
   SerialPC.print(" ");
   SerialPC.print(buffer[1]);
@@ -444,12 +446,23 @@ float getLine() {
   SerialPC.print(buffer[2]);
   SerialPC.print(" ");
   SerialPC.println(buffer[3]);
+  */
   memcpy(&A, buffer, 4);
 
   return A;
 }
 
 void move_motor(float speed, float moveDeg, float heading, float tarHeading) {
+  heading = getAngle();
+
+  SerialPC.print(" speed "); 
+  SerialPC.print(speed);
+  SerialPC.print(" moveDeg ");
+  SerialPC.print(moveDeg);
+  SerialPC.print(" heading ");
+  SerialPC.print(heading);
+  SerialPC.print(" tarHeading ");
+  SerialPC.println(tarHeading);
   //P計算
   float err = tarHeading - heading;
   if (err > 180) err -= 360;
@@ -464,13 +477,34 @@ void move_motor(float speed, float moveDeg, float heading, float tarHeading) {
   prevErr = err;
 
   //PD計算
-  float PID = Kp * err + Kd * D;;
-  PID = constrain(PID, -0.5f, 0.5f);
+  float PID = Kp * err + Kd * D;
+  PID = constrain(PID, -0.3f, 0.3f);
 
-  float v_fr = sin((float)radians(moveDeg - 45.0)) * speed + PID;
-  float v_br = sin((float)radians(moveDeg - 135.0)) * speed + PID;
-  float v_bl = sin((float)radians(moveDeg - 225.0)) * speed + PID;
-  float v_fl = sin((float)radians(moveDeg - 315.0)) * speed + PID;
+  float v_fr = /*(sin(radians(moveDeg - 45.0)) * speed) + */PID;
+  float v_br = /*(sin(radians(moveDeg - 135.0)) * speed) + */PID;
+  float v_bl = /*(sin(radians(moveDeg - 225.0)) * speed) + */PID;
+  float v_fl = /*(sin(radians(moveDeg - 315.0)) * speed) + */PID;
+
+  if(v_fr < -1.0f) v_fr = -1.0f;
+  if(v_fr > 1.0f) v_fr = 1.0f;
+
+  if(v_br < -1.0f) v_br = -1.0f;
+  if(v_br > 1.0f) v_br = 1.0f;
+
+  if(v_bl < -1.0f) v_bl = -1.0f;
+  if(v_bl > 1.0f) v_bl = 1.0f;
+
+  if(v_fl < -1.0f) v_fl = -1.0f;
+  if(v_fl > 1.0f) v_fl = 1.0f;
+
+  SerialPC.print(" v_fl ");
+  SerialPC.print(v_fl);
+  SerialPC.print(" v_fr ");
+  SerialPC.print(v_fr);
+  SerialPC.print(" v_bl ");
+  SerialPC.print(v_bl);
+  SerialPC.print(" v_br ");
+  SerialPC.println(v_br);
 
   setMotor(v_fl, FL_FWD, FL_REV);
   setMotor(v_fr, FR_FWD, FR_REV);
