@@ -46,7 +46,7 @@
 #define A8 PB1
 
 const int BALL[8] = {A1, A2, A3, A4, A5, A6, A7, A8};
-float BALLANGLE[8] = {0, 45, 90, 135, 180, 225, 270, 315};
+double BALLANGLE[8] = {0, 45, 90, 135, 180, 225, 270, 315};
 
 #define LED1 PC14
 #define LED2 PA0
@@ -95,7 +95,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire1, OLED_RESET);
 Adafruit_BNO055 bno = Adafruit_BNO055(55);
 
 // define variables
-const int PWM_MAX = 255;
+const int PWM_MAX = 255;  //最大値ではなく比率になるので注意
 bool gameFlag = false;
 unsigned long lastCatchTime = 0;
 bool catching = false;
@@ -103,6 +103,8 @@ bool catching = false;
 int menu = 0;
 const unsigned char memuDisplay[] = {};
 
+
+// MARK: SPEED
 #define SPEED 0.5
 
 #define LINE_INIT 0xAD
@@ -110,18 +112,18 @@ const unsigned char memuDisplay[] = {};
 #define LINE_OK 0xAF
 
 struct Ball {
-  float ANGLE;
-  float DISTANCE;
+  double ANGLE;
+  double DISTANCE;
 };
-const float BALL_THRESHOLD = 280.0;
+const double BALL_THRESHOLD = 280.0;
 
-// PID
-float Kp = 0.02;
-float Ki = 0.00025;
-float Kd = 0.002;
+// MARK: PID
+double Kp = 0.02;
+double Ki = 0.00025;
+double Kd = 0.002;
 
-float errI = 0.0;
-float prevErr = 0.0;
+double errI = 0.0;
+double prevErr = 0.0;
 
 unsigned long prevTime = 0;
 
@@ -129,13 +131,13 @@ unsigned long prevTime = 0;
 void writeEEPROM(int addr, byte data);
 byte readEEPROM(int addr);
 void kick();
-float culcMoveAngle(float ballAngle);
-float getAngle();
-float getLine();
+double culcMoveAngle(double ballAngle);
+double getAngle();
+double getLine();
 Ball getBall();
-void setMotor(float power, int pinF, int pibR);
-void move_motor(float speed, float moveDeg, float heading, float tarHeading);
-void move(float speed, float moveDeg, float heading, float targetHeading);
+void setMotor(double power, int pinF, int pibR);
+void move_motor(double speed, double moveDeg, double heading, double tarHeading);
+void move(double speed, double moveDeg, double heading, double targetHeading);
 void motorTest();
 
 void setup() {
@@ -238,6 +240,8 @@ void setup() {
   display.display();
 }
 
+
+// MARK: main loop
 void loop() {
 
   //motorTest();
@@ -245,12 +249,13 @@ void loop() {
   if (!digitalRead(Enter)){
     gameFlag = true;
   }
+
   while (gameFlag) {
-    float angle = 0.0;
-    float moveAngle = 0.0;
-    float speed = 0.0;
-    float tarAngle = 0.0;
-    float LineAngle = 0.0;
+    double angle = 0.0;
+    double moveAngle = 0.0;
+    double speed = 0.0;
+    double tarAngle = 0.0;
+    double LineAngle = 0.0;
     Ball ball = {0.0, 0.0};
 
     // read Line
@@ -333,18 +338,16 @@ byte readEEPROM(int addr) {
 }
 
 void kick() {
-  if (analogRead(ADCCatch) < 200) {
+  if (analogRead(ADCCatch) < 200) { //ボール保持判定
     if (!catching) {
       lastCatchTime = millis();
       catching = true;
     }
-    if (millis() - lastCatchTime > 10) {
-      digitalWrite(Kick, HIGH);
-      delay(100);
+    if (catching && millis() - lastCatchTime > 10 && millis() - lastCatchTime < 100) {
+      digitalWrite(Kick, HIGH); 
+    } else if(millis() - lastCatchTime >= 100) {
       digitalWrite(Kick, LOW);
       catching = false;
-    }else{
-      digitalWrite(Kick, LOW);
     }
   } else {
     catching = false;
@@ -352,21 +355,20 @@ void kick() {
   }
 }
 
-float getAngle() {
+double getAngle() {
   sensors_event_t ev;
   bno.getEvent(&ev);
 
-  float heading = ev.orientation.x;
+  double heading = ev.orientation.x;
   return heading;
 }
 
-void setMotor(float power, int pinF, int pinR) {
-  if (power > 1.0f)  power = 1.0f;
-  if (power < -1.0f) power = -1.0f;
+void setMotor(double power, int pinF, int pinR) {
+  power = constrain(power, -1.0f, 1.0f);
 
   int pwm = fabs(power) * PWM_MAX;
 
-  SerialPC.println(pwm);
+  //SerialPC.println(pwm);
 
   if (power >= 0) {
     analogWrite(pinF, pwm);
@@ -377,10 +379,10 @@ void setMotor(float power, int pinF, int pinR) {
   }
 }
 
-float culcMoveAngle(float ballAngle) {
-  float centered = ballAngle;
+double culcMoveAngle(double ballAngle) {
+  double centered = ballAngle;
   if (centered > 180.0f) centered -= 360.0f;
-  float Ang = centered * 1.5f;
+  double Ang = centered * 1.5f;
 
   while (Ang < 0.0f) Ang += 360.0f;
   while (Ang >= 360.0f) Ang -= 360.0f;
@@ -388,7 +390,7 @@ float culcMoveAngle(float ballAngle) {
 }
 
 Ball getBall() {
-  float X = 0.0, Y = 0.0;
+  double X = 0.0, Y = 0.0;
   int Si[8];
   int min_val = analogRead(BALL[0]);
 
@@ -398,14 +400,14 @@ Ball getBall() {
       min_val = Si[i];
     }
 
-    float rad = radians(BALLANGLE[i]);
+    double rad = radians(BALLANGLE[i]);
     X += Si[i] * cos(rad);
     Y += Si[i] * sin(rad);
   }
 
   Ball ballinfo;
 
-  float ballAngle = atan2(Y, X) * 180.0 / PI;
+  double ballAngle = atan2(Y, X) * 180.0 / PI;
   ballAngle += 180.0; // add offset to reverse
   if (ballAngle < 0) {
     ballAngle += 360.0;
@@ -431,8 +433,8 @@ Ball getBall() {
   return ballinfo;
 }
 
-float getLine() {
-  float A = 0.0;
+double getLine() {
+  double A = 0.0;
   SerialLine.write(LINE_INFO);
   //SerialPC.println("getLine now");
 
@@ -452,7 +454,9 @@ float getLine() {
   return A;
 }
 
-void move_motor(float speed, float moveDeg, float heading, float tarHeading) {
+// MARK: move motor
+
+void move_motor(double speed, double moveDeg, double heading, double tarHeading) {
   heading = getAngle();
 
   SerialPC.print(" speed "); 
@@ -464,73 +468,97 @@ void move_motor(float speed, float moveDeg, float heading, float tarHeading) {
   SerialPC.print(" tarHeading ");
   SerialPC.println(tarHeading);
   //P計算
-  float err = tarHeading - heading;
+  double err = tarHeading - heading;
   if (err > 180) err -= 360;
   if (err < -180) err += 360;
 
   //D計算
   unsigned long now = millis();
-  float dt = (now - prevTime) / 1000.0f;
+  double dt = (now - prevTime) / 1000.0f;
   if (dt <= 0.0f) dt = 0.000001f;
-  float D = (err - prevErr) / dt;
+  double D = (err - prevErr) / dt;
   prevTime = now;
   prevErr = err;
 
   //PD計算
-  float PID = Kp * err + Kd * D;
-  PID = constrain(PID, -0.3f, 0.3f);
+  double PID = Kp * err + Kd * D;
+  PID = constrain(PID, -0.5f, 0.5f);
 
-  float v_fr = /*(sin(radians(moveDeg - 45.0)) * speed) + */PID;
-  float v_br = /*(sin(radians(moveDeg - 135.0)) * speed) + */PID;
-  float v_bl = /*(sin(radians(moveDeg - 225.0)) * speed) + */PID;
-  float v_fl = /*(sin(radians(moveDeg - 315.0)) * speed) + */PID;
+  double v_fr = /*-cos(radians(moveDeg + 45.0)) */ + PID;
+  double v_br = /*-cos(radians(moveDeg - 45.0)) */ + PID;
+  double v_bl = /*cos(radians(moveDeg + 45.0)) */ + PID;
+  double v_fl = /*cos(radians(moveDeg - 45.0)) */ + PID;
+  //正規化
+  v_fr = constrain(v_fr, -1.0f, 1.0f);
+  v_br = constrain(v_br, -1.0f, 1.0f);
+  v_bl = constrain(v_bl, -1.0f, 1.0f);
+  v_fl = constrain(v_fl, -1.0f, 1.0f);
 
-  if(v_fr < -1.0f) v_fr = -1.0f;
-  if(v_fr > 1.0f) v_fr = 1.0f;
-
-  if(v_br < -1.0f) v_br = -1.0f;
-  if(v_br > 1.0f) v_br = 1.0f;
-
-  if(v_bl < -1.0f) v_bl = -1.0f;
-  if(v_bl > 1.0f) v_bl = 1.0f;
-
-  if(v_fl < -1.0f) v_fl = -1.0f;
-  if(v_fl > 1.0f) v_fl = 1.0f;
-
-  SerialPC.print(" v_fl ");
-  SerialPC.print(v_fl);
-  SerialPC.print(" v_fr ");
-  SerialPC.print(v_fr);
-  SerialPC.print(" v_bl ");
-  SerialPC.print(v_bl);
-  SerialPC.print(" v_br ");
+  SerialPC.printf(">v_fr:");
+  SerialPC.println(v_fr);
+  SerialPC.printf(">v_br:");
   SerialPC.println(v_br);
-
+  SerialPC.printf(">v_bl:");
+  SerialPC.println(v_bl);
+  SerialPC.printf(">v_fl:");
+  SerialPC.println(v_fl);
+  /*
   setMotor(v_fl, FL_FWD, FL_REV);
   setMotor(v_fr, FR_FWD, FR_REV);
   setMotor(v_bl, BL_FWD, BL_REV);
   setMotor(v_br, BR_FWD, BR_REV);
+  */
+
+  //setmotorを介さずに直接PWM出力
+  if (v_fr >= 0) {
+    analogWrite(FL_FWD, (int)(v_fr * PWM_MAX));
+    analogWrite(FL_REV, 0);
+  } else {
+    analogWrite(FL_FWD, 0);
+    analogWrite(FL_REV, (int)(v_fr * -PWM_MAX));
+  }
+  if (v_fr >= 0) {
+    analogWrite(FR_FWD, (int)(v_fr * PWM_MAX));
+    analogWrite(FR_REV, 0);
+  } else {
+    analogWrite(FR_FWD, 0);
+    analogWrite(FR_REV, (int)(v_fr * -PWM_MAX));
+  }
+  if (v_bl >= 0) {
+    analogWrite(BL_FWD, (int)(v_bl * PWM_MAX));
+    analogWrite(BL_REV, 0);
+  } else {
+    analogWrite(BL_FWD, 0);
+    analogWrite(BL_REV, (int)(v_bl * -PWM_MAX));
+  }
+  if (v_br >= 0) {
+    analogWrite(BR_FWD, (int)(v_br * PWM_MAX));
+    analogWrite(BR_REV, 0);
+  } else {
+    analogWrite(BR_FWD, 0);
+    analogWrite(BR_REV, (int)(v_br * -PWM_MAX));
+  }
 }
 
-void move(float speed, float moveDeg, float heading, float targetHeading) {
-  float rad = moveDeg * M_PI / 180.0;
-  float vx = speed * cos(rad);
-  float vy = speed * sin(rad);
+void move(double speed, double moveDeg, double heading, double targetHeading) {
+  double rad = moveDeg * M_PI / 180.0;
+  double vx = speed * cos(rad);
+  double vy = speed * sin(rad);
 
-  float err = targetHeading - heading;
+  double err = targetHeading - heading;
   if (err > 180) err -= 360;
   if (err < -180) err += 360;
 
-  float omega = Kp * err;
+  double omega = Kp * err;
   omega = constrain(omega, -1.0f, 1.0f);
 
   // --- 4輪オムニ逆運動学基本式 ---
-  float v_fl =  vx + vy + omega;
-  float v_fr = -vx + vy + omega;
-  float v_bl =  vx - vy + omega;
-  float v_br = -vx - vy + omega;
+  double v_fl =  vx + vy + omega;
+  double v_fr = -vx + vy + omega;
+  double v_bl =  vx - vy + omega;
+  double v_br = -vx - vy + omega;
 
-  float max_v = max(max(fabs(v_fl), fabs(v_fr)), max(fabs(v_bl), fabs(v_br)));
+  double max_v = max(max(fabs(v_fl), fabs(v_fr)), max(fabs(v_bl), fabs(v_br)));
   if (max_v > 1.0f) {
     v_fl /= max_v;
     v_fr /= max_v;
