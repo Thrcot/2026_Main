@@ -515,28 +515,28 @@ void move_motor(double speed, double moveDeg, double heading, double tarHeading)
     analogWrite(FL_REV, 0);
   } else {
     analogWrite(FL_FWD, 0);
-    analogWrite(FL_REV, (int)(v_fr * -PWM_MAX));
+    analogWrite(FL_REV, (int)(fabs(v_fr) * PWM_MAX));
   }
   if (v_fr >= 0) {
     analogWrite(FR_FWD, (int)(v_fr * PWM_MAX));
     analogWrite(FR_REV, 0);
   } else {
     analogWrite(FR_FWD, 0);
-    analogWrite(FR_REV, (int)(v_fr * -PWM_MAX));
+    analogWrite(FR_REV, (int)(fabs(v_fr) * PWM_MAX));
   }
   if (v_bl >= 0) {
     analogWrite(BL_FWD, (int)(v_bl * PWM_MAX));
     analogWrite(BL_REV, 0);
   } else {
     analogWrite(BL_FWD, 0);
-    analogWrite(BL_REV, (int)(v_bl * -PWM_MAX));
+    analogWrite(BL_REV, (int)(fabs(v_bl) * PWM_MAX));
   }
   if (v_br >= 0) {
     analogWrite(BR_FWD, (int)(v_br * PWM_MAX));
     analogWrite(BR_REV, 0);
   } else {
     analogWrite(BR_FWD, 0);
-    analogWrite(BR_REV, (int)(v_br * -PWM_MAX));
+    analogWrite(BR_REV, (int)(fabs(v_br) * PWM_MAX));
   }
 }
 
