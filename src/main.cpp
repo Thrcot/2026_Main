@@ -105,7 +105,7 @@ const unsigned char memuDisplay[] = {};
 
 
 // MARK: SPEED
-#define SPEED 0.5
+#define SPEED 0.7
 
 #define LINE_INIT 0xAD
 #define LINE_INFO 0xAE
@@ -118,6 +118,7 @@ struct Ball {
 const double BALL_THRESHOLD = 280.0;
 
 // MARK: PID
+double PID_limit = 0.3;
 double Kp = 0.02;
 double Ki = 0.00025;
 double Kd = 0.002;
@@ -133,12 +134,15 @@ byte readEEPROM(int addr);
 void kick();
 double culcMoveAngle(double ballAngle);
 double getAngle();
-double getLine();
+float getLine();
 Ball getBall();
-void setMotor(double power, int pinF, int pibR);
+void setMotor(double power, int pinF, int pinR);
 void move_motor(double speed, double moveDeg, double heading, double tarHeading);
 void move(double speed, double moveDeg, double heading, double targetHeading);
 void motorTest();
+void motorStop();
+void lcd_drawarrow(double angle);
+void lcd_menu();
 
 void setup() {
   SerialPC.begin(115200);
@@ -243,16 +247,18 @@ void setup() {
 
 // MARK: main loop
 void loop() {
-
+  
+  while(gameFlag == false){
+    lcd_menu();
+  }
   //motorTest();
 
-  if (!digitalRead(Enter)){
-    gameFlag = true;
-  }
+
+
 
   while (gameFlag) {
-    double angle = 0.0;
     double moveAngle = 0.0;
+    double angle = 0.0;
     double speed = 0.0;
     double tarAngle = 0.0;
     double LineAngle = 0.0;
@@ -262,7 +268,22 @@ void loop() {
 
     // read ball
     ball = getBall();
+    moveAngle = ball.ANGLE;
     moveAngle = culcMoveAngle(ball.ANGLE);
+
+    if (ball.ANGLE >= 0) {
+      display.clearDisplay();
+      lcd_drawarrow(ball.ANGLE);
+      display.display();
+    } else {
+      display.clearDisplay();
+      lcd_drawarrow(0);  // デフォルト表示
+      display.display();
+    }
+
+
+    //SerialPC.printf(">moveAngle:");
+    //SerialPC.println(moveAngle);
     speed = SPEED;
 
     // read current angle
@@ -302,14 +323,12 @@ void loop() {
     // move
     // read line angle
     LineAngle = getLine();
-    /*
-    while (!(LineAngle == -1.0)) {
+    //SerialPC.print("LineAngle: ");
+    //SerialPC.println(LineAngle);
+
+    if(LineAngle != -1.0){
       moveAngle = LineAngle;
-      speed = 0.8;
-      move_motor(speed, moveAngle, angle, tarAngle);
-      LineAngle = getLine();
     }
-    */
     move_motor(speed, moveAngle, angle, tarAngle);
   }
 
@@ -381,60 +400,53 @@ void setMotor(double power, int pinF, int pinR) {
 
 double culcMoveAngle(double ballAngle) {
   double centered = ballAngle;
-  if (centered > 180.0f) centered -= 360.0f;
-  double Ang = centered * 1.5f;
+  //if (centered > 180.0f) centered -= 360.0f;
+  //double Ang = centered * 1.5f;
 
-  while (Ang < 0.0f) Ang += 360.0f;
-  while (Ang >= 360.0f) Ang -= 360.0f;
-  return Ang;
+  while (centered < 0.0){
+    centered = centered + 360.0;
+  }
+  while (centered >= 360.0){
+    centered = centered - 360.0;
+  }
+  return centered;
 }
 
 Ball getBall() {
   double X = 0.0, Y = 0.0;
   int Si[8];
-  int min_val = analogRead(BALL[0]);
+  int min_val = 1023;
 
   for (int i = 0; i < 8; i++) {
     Si[i] = analogRead(BALL[i]);
-    if (Si[i] < min_val) {
-      min_val = Si[i];
-    }
+    min_val = min(min_val, Si[i]);
 
     double rad = radians(BALLANGLE[i]);
-    X += Si[i] * cos(rad);
-    Y += Si[i] * sin(rad);
+    double weight = 1023.0 - Si[i];   // ★重要
+    X += weight * cos(rad);
+    Y += weight * sin(rad);
   }
 
   Ball ballinfo;
 
   double ballAngle = atan2(Y, X) * 180.0 / PI;
-  ballAngle += 180.0; // add offset to reverse
-  if (ballAngle < 0) {
-    ballAngle += 360.0;
-  }
-
-  while (ballAngle >= 360.0f) ballAngle -= 360.0f;
-  while (ballAngle < 0.0f) ballAngle += 360.0f;
+  ballAngle = fmod(ballAngle + 360.0, 360.0);
 
   ballinfo.ANGLE = ballAngle;
 
-  int ledIndex = (int)round(ballAngle / 45.0) % 8;
+  int ledIndex = (int)(ballAngle / 45.0) % 8;
 
   for (int i = 0; i < 8; i++) {
-    if (i == ledIndex) {
-      digitalWrite(LED[i], HIGH);
-    } else {
-      digitalWrite(LED[i], LOW);
-    }
+    digitalWrite(LED[i], i == ledIndex ? HIGH : LOW);
   }
 
-  ballinfo.DISTANCE = min_val;
+  ballinfo.DISTANCE = 1023 - min_val;
 
   return ballinfo;
 }
 
-double getLine() {
-  double A = 0.0;
+float getLine() {
+  float A = 0.0;
   SerialLine.write(LINE_INFO);
   //SerialPC.println("getLine now");
 
@@ -449,6 +461,7 @@ double getLine() {
   SerialPC.print(" ");
   SerialPC.println(buffer[3]);
   */
+  
   memcpy(&A, buffer, 4);
 
   return A;
@@ -459,112 +472,49 @@ double getLine() {
 void move_motor(double speed, double moveDeg, double heading, double tarHeading) {
   heading = getAngle();
 
-  SerialPC.print(" speed "); 
-  SerialPC.print(speed);
-  SerialPC.print(" moveDeg ");
-  SerialPC.print(moveDeg);
-  SerialPC.print(" heading ");
-  SerialPC.print(heading);
-  SerialPC.print(" tarHeading ");
-  SerialPC.println(tarHeading);
-  //P計算
+  // --- PID計算 ---
   double err = tarHeading - heading;
   if (err > 180) err -= 360;
   if (err < -180) err += 360;
 
-  //D計算
   unsigned long now = millis();
-  double dt = (now - prevTime) / 1000.0f;
-  if (dt <= 0.0f) dt = 0.000001f;
+  double dt = (now - prevTime) / 1000.0;
+  if (dt <= 0.0) dt = 0.001;
+
   double D = (err - prevErr) / dt;
-  prevTime = now;
   prevErr = err;
+  prevTime = now;
 
-  //PD計算
   double PID = Kp * err + Kd * D;
-  PID = constrain(PID, -0.5f, 0.5f);
+  PID = constrain(PID, -PID_limit, PID_limit);  //
 
-  double v_fr = /*-cos(radians(moveDeg + 45.0)) */ + PID;
-  double v_br = /*-cos(radians(moveDeg - 45.0)) */ + PID;
-  double v_bl = /*cos(radians(moveDeg + 45.0)) */ + PID;
-  double v_fl = /*cos(radians(moveDeg - 45.0)) */ + PID;
-  //正規化
-  v_fr = constrain(v_fr, -1.0f, 1.0f);
-  v_br = constrain(v_br, -1.0f, 1.0f);
-  v_bl = constrain(v_bl, -1.0f, 1.0f);
-  v_fl = constrain(v_fl, -1.0f, 1.0f);
+  // 移動成分計算
+  double m_fr = -cos(radians(moveDeg + 45.0)) * speed;
+  double m_br = -cos(radians(moveDeg - 45.0)) * speed;
+  double m_bl =  cos(radians(moveDeg + 45.0)) * speed;
+  double m_fl =  cos(radians(moveDeg - 45.0)) * speed;
 
-  SerialPC.printf(">v_fr:");
-  SerialPC.println(v_fr);
-  SerialPC.printf(">v_br:");
-  SerialPC.println(v_br);
-  SerialPC.printf(">v_bl:");
-  SerialPC.println(v_bl);
-  SerialPC.printf(">v_fl:");
-  SerialPC.println(v_fl);
-  /*
-  setMotor(v_fl, FL_FWD, FL_REV);
-  setMotor(v_fr, FR_FWD, FR_REV);
-  setMotor(v_bl, BL_FWD, BL_REV);
-  setMotor(v_br, BR_FWD, BR_REV);
-  */
+  //最も大きい移動成分を取得
+  double max_move = max(
+    max(fabs(m_fl), fabs(m_fr)),
+    max(fabs(m_bl), fabs(m_br))
+  );
 
-  //setmotorを介さずに直接PWM出力
-  if (v_fr >= 0) {
-    analogWrite(FL_FWD, (int)(v_fr * PWM_MAX));
-    analogWrite(FL_REV, 0);
-  } else {
-    analogWrite(FL_FWD, 0);
-    analogWrite(FL_REV, (int)(fabs(v_fr) * PWM_MAX));
-  }
-  if (v_fr >= 0) {
-    analogWrite(FR_FWD, (int)(v_fr * PWM_MAX));
-    analogWrite(FR_REV, 0);
-  } else {
-    analogWrite(FR_FWD, 0);
-    analogWrite(FR_REV, (int)(fabs(v_fr) * PWM_MAX));
-  }
-  if (v_bl >= 0) {
-    analogWrite(BL_FWD, (int)(v_bl * PWM_MAX));
-    analogWrite(BL_REV, 0);
-  } else {
-    analogWrite(BL_FWD, 0);
-    analogWrite(BL_REV, (int)(fabs(v_bl) * PWM_MAX));
-  }
-  if (v_br >= 0) {
-    analogWrite(BR_FWD, (int)(v_br * PWM_MAX));
-    analogWrite(BR_REV, 0);
-  } else {
-    analogWrite(BR_FWD, 0);
-    analogWrite(BR_REV, (int)(fabs(v_br) * PWM_MAX));
-  }
-}
+  // 余った成分をPIDに回す
+  double pid_margin = 1.0 - max_move;
+  pid_margin = constrain(pid_margin, 0.0, 1.0);
+  PID = PID * pid_margin;
 
-void move(double speed, double moveDeg, double heading, double targetHeading) {
-  double rad = moveDeg * M_PI / 180.0;
-  double vx = speed * cos(rad);
-  double vy = speed * sin(rad);
+  double v_fl = m_fl + PID;
+  double v_fr = m_fr + PID;
+  double v_bl = m_bl + PID;
+  double v_br = m_br + PID;
 
-  double err = targetHeading - heading;
-  if (err > 180) err -= 360;
-  if (err < -180) err += 360;
-
-  double omega = Kp * err;
-  omega = constrain(omega, -1.0f, 1.0f);
-
-  // --- 4輪オムニ逆運動学基本式 ---
-  double v_fl =  vx + vy + omega;
-  double v_fr = -vx + vy + omega;
-  double v_bl =  vx - vy + omega;
-  double v_br = -vx - vy + omega;
-
-  double max_v = max(max(fabs(v_fl), fabs(v_fr)), max(fabs(v_bl), fabs(v_br)));
-  if (max_v > 1.0f) {
-    v_fl /= max_v;
-    v_fr /= max_v;
-    v_bl /= max_v;
-    v_br /= max_v;
-  }
+  //念のため正規化
+  v_fl = constrain(v_fl, -1.0, 1.0);
+  v_fr = constrain(v_fr, -1.0, 1.0);
+  v_bl = constrain(v_bl, -1.0, 1.0);
+  v_br = constrain(v_br, -1.0, 1.0);
 
   setMotor(v_fl, FL_FWD, FL_REV);
   setMotor(v_fr, FR_FWD, FR_REV);
@@ -611,4 +561,243 @@ void motorTest () {
   analogWrite(BL_REV, 0);
   analogWrite(BR_FWD, 0);
   analogWrite(BR_REV, 0);
+}
+
+void motorStop (){
+  analogWrite(FL_FWD, 0);
+  analogWrite(FL_REV, 0);
+  analogWrite(FR_FWD, 0);
+  analogWrite(FR_REV, 0);
+  analogWrite(BL_FWD, 0);
+  analogWrite(BL_REV, 0);
+  analogWrite(BR_FWD, 0);
+  analogWrite(BR_REV, 0);
+}
+
+void lcd_drawarrow(double angle) {
+  const int cx = 64;   // 画面中央 (128/2)
+  const int cy = 32;   // 画面中央 (64/2)
+  const int r_body = 8;
+  const int r_arrow = 20;
+
+  // ロボット本体（円）
+  display.drawCircle(cx, cy, r_body, SSD1306_WHITE);
+  display.fillCircle(cx, cy, 2, SSD1306_WHITE); // 中心点
+
+  // 角度 → ラジアン（上が0°）
+  double rad = radians(angle - 90);
+
+  // 矢印先端
+  int x2 = cx + r_arrow * cos(rad);
+  int y2 = cy + r_arrow * sin(rad);
+
+  // 矢印の軸
+  display.drawLine(cx, cy, x2, y2, SSD1306_WHITE);
+
+  // 矢印の羽
+  double headAngle = radians(25);
+  int hx1 = x2 - 6 * cos(rad - headAngle);
+  int hy1 = y2 - 6 * sin(rad - headAngle);
+  int hx2 = x2 - 6 * cos(rad + headAngle);
+  int hy2 = y2 - 6 * sin(rad + headAngle);
+
+  display.drawLine(x2, y2, hx1, hy1, SSD1306_WHITE);
+  display.drawLine(x2, y2, hx2, hy2, SSD1306_WHITE);
+}
+
+void lcd_menu(){
+  static int menu = 0;
+  static int cursor = 0;
+
+  static bool prevEnter = true;
+  static bool prevNext  = true;
+  static bool prevBack  = true;
+  static bool prevOpt   = true;
+
+  bool nowEnter = digitalRead(Enter);
+  bool nowNext  = digitalRead(Next);
+  bool nowBack  = digitalRead(Back);
+  bool nowOpt   = digitalRead(Option);
+
+  display.clearDisplay();
+  display.setTextSize(1);
+  display.setTextColor(WHITE);
+
+  //画面処理
+  if(menu == 0){
+    display.setCursor(0, cursor * 8);
+    display.print(">");
+
+    display.setCursor(10,0);
+    display.println("Start Game");
+    display.setCursor(10,8);
+    display.println("Settings");
+  }
+  if(menu == 1){
+    display.setCursor(0, cursor * 8);
+    display.print(">");
+
+    display.setCursor(10,0);
+    display.println("line_test");
+    display.setCursor(10,8);
+    display.println("ball_test");
+    display.setCursor(10,16);
+    display.println("motor_test");
+    display.setCursor(10,24);
+    display.println("kicker_test");
+    display.setCursor(10,32);
+    display.println("BNO055_test");
+    display.setCursor(10,40);
+    display.println("Back");
+  }
+  if(menu == 3){
+    Ball ball = {0.0, 0.0};
+    ball = getBall();
+    if (ball.ANGLE >= 0) {
+      display.clearDisplay();
+      lcd_drawarrow(culcMoveAngle(ball.ANGLE));
+    } else {
+      display.clearDisplay();
+      lcd_drawarrow(0);  // デフォルト表示
+    }
+    display.setCursor(0,0);
+    display.print("Angle:");
+    display.print(ball.ANGLE);
+    display.setCursor(10,8);
+    display.println(">Back");
+    display.display();
+
+  }
+  if(menu == 4){
+    display.setCursor(0, cursor * 8);
+    display.print(">");
+
+    display.setCursor(10,0);
+    display.println("Run");
+    display.setCursor(10,8);
+    display.println("Back");
+  }
+  if(menu == 5){
+    display.setCursor(0, cursor * 8);
+    display.print(">");
+
+    display.setCursor(10,0);
+    display.println("Run");
+    display.setCursor(10,8);
+    display.println("Back");
+  }
+  if(menu == 6){
+    display.setCursor(10,0);
+    display.println(getAngle());
+    display.setCursor(10,8);
+    display.println(">Back");
+  }
+
+  // ボタン処理
+  if(prevEnter && !nowEnter){
+    if(menu == 0){
+      if(cursor == 0){
+        gameFlag = true;
+      }
+      else if(cursor == 1){
+        menu = 1;
+        cursor = 0;
+      }
+    }
+    else if(menu == 1){
+      if(cursor == 1){
+        menu = 3;
+        cursor = 0;
+      }
+      else if(cursor == 2){
+        menu = 4;
+        cursor = 0;
+      }
+      else if(cursor == 3){
+        menu = 5;
+        cursor = 0;
+      }
+      else if(cursor == 4){
+        menu = 6;
+        cursor = 0;
+      }
+      else if(cursor == 5){
+        menu = 0;
+        cursor = 0;
+      }
+    }
+    else if(menu == 3){
+      menu = 1;
+      cursor = 0;
+    }
+    else if(menu == 4){
+      if(cursor == 0){
+        display.setCursor(10,0);
+        display.println("Running...");
+        display.setCursor(10,8);
+        display.println("Back");
+        display.display();
+        motorTest();
+      }
+      if(cursor == 1){
+        motorStop();
+        menu = 1;
+        cursor = 0;
+      }
+    }
+    else if(menu == 5){
+      if(cursor == 0){
+        display.setCursor(10,0);
+        display.println("Running...");
+        display.setCursor(10,8);
+        display.println("Back");
+        display.display();
+        digitalWrite(Kick, HIGH);
+        delay(100);
+        digitalWrite(Kick, LOW);
+      }
+      if(cursor == 1){
+        menu = 1;
+        cursor = 0;
+      }
+    }
+    else if(menu == 6){
+      menu = 1;
+      cursor = 0;
+    }
+  }
+
+  //カーソル移動
+  if(prevNext && !nowNext){
+    cursor++;
+    if(menu == 0 && cursor > 1) cursor = 0;
+    if(menu == 1 && cursor > 5) cursor = 0;
+    if(menu == 4 && cursor > 1) cursor = 0;
+    if(menu == 5 && cursor > 1) cursor = 0;
+    if(menu == 6 && cursor > 0) cursor = 0;
+  }
+
+  if(prevBack && !nowBack){
+    cursor--;
+    if(menu == 0 && cursor < 0) cursor = 1;
+    if(menu == 1 && cursor < 0) cursor = 5;
+    if(menu == 4 && cursor < 0) cursor = 1;
+    if(menu == 5 && cursor < 0) cursor = 1;
+    if(menu == 6 && cursor < 0) cursor = 0;
+  }
+
+
+  if(prevOpt && !nowOpt){
+    menu = 1;
+    cursor = 0;
+  }
+
+  // 状態更新
+  prevEnter = nowEnter;
+  prevNext  = nowNext;
+  prevBack  = nowBack;
+  prevOpt   = nowOpt;
+
+  display.display();
+  delay(100);
 }
