@@ -125,13 +125,13 @@ volatile bool adc_ready = false;
 bool gameFlag = false;
 uint8_t line_threshold = 155; //デフォルト(仮)
 
-int PWM_limit = 230; // yukuyukuMD MAX is 230.
+int PWM_limit = 50; // yukuyukuMD MAX is 230.
 
 int speed = 170; //0~255
 int PID_limit = 60; //0~255
-double Kp = 2.0;
+double Kp = 0.05;
 double Ki = 0.0;
-double Kd = 0.6;
+double Kd = 0.0;
 
 double headingOffset = 0.0;
 
@@ -279,17 +279,6 @@ void loop() {
     processADC();
   }
   if(gameFlag == true){
-    static int starttime = millis();
-    if(millis() - starttime > 10000){
-      setMotor(0, FL_FWD, FL_REV);
-      setMotor(0, BL_FWD, BL_REV);
-      setMotor(0, BR_FWD, BR_REV);
-      setMotor(0, FR_FWD, FR_REV);
-      delay(500);
-      starttime = millis();
-    }
-
-
     static int16_t lastLineAngle = -1;
     static unsigned long lastLineTime = 0;
     static int lineAngle = -1;
@@ -302,21 +291,19 @@ void loop() {
     lcd_drawarrow(targetAngle);
     display.display();
 
-
-
-  lineAngle = getLineAngle();
-  if(lineAngle != -1){
-    lastLineAngle = lineAngle;
-    lastLineTime = millis();
-  }
+    lineAngle = getLineAngle();
+    if(lineAngle != -1){
+      lastLineAngle = lineAngle;
+      lastLineTime = millis();
+    }
 
   if(lastLineAngle != -1 && (millis() - lastLineTime) < 500){ // 200ms間は回避
     targetAngle = wrapAngle180((double)lastLineAngle);
   }
 
-    move_motor(speed, targetAngle, heading, 0.0);
+  move_motor(speed, targetAngle, heading, 0.0);
 
-    kick();
+  //kick();
 
     if (!digitalRead(Pause)) {
       gameFlag = false;
@@ -467,21 +454,26 @@ byte readEEPROM(int addr) {
 Ball getBall() {
   double X = 0.0, Y = 0.0;
   uint16_t min_val = sensor_avg[0];
+  uint16_t max_val = sensor_avg[0];
 
-  for(int i=0;i<SENSOR_CH;i++)
-  {
+  for(int i = 0; i < SENSOR_CH; i++){
     if(sensor_avg[i] < min_val)
       min_val = sensor_avg[i];
+    if(sensor_avg[i] > max_val)
+      max_val = sensor_avg[i];
+  }
+
+  for(int i = 0; i < SENSOR_CH; i++){
+    double weight = max_val - sensor_avg[i];  // 小さいほど強い
 
     double rad = BALLANGLE[i] * PI / 180.0;
-    X += sensor_avg[i] * cos(rad);
-    Y += sensor_avg[i] * sin(rad);
+    X += weight * cos(rad);
+    Y += weight * sin(rad);
   }
 
   Ball ballinfo;
 
   double angle = atan2(Y, X) * 180.0 / PI;
-  angle += 180.0;
   angle = wrapAngle180(angle);
 
   ballinfo.Angle = angle;
@@ -617,10 +609,15 @@ void move_motor(int speed, double target_angle, double heading, double tarHeadin
   int m_fl = (int)(speed * cos(radians(target_angle - 45.0)));
 
   //Rotation
-  int v_fr = m_fr + PID;
-  int v_br = m_br + PID;
-  int v_bl = m_bl + PID;
-  int v_fl = m_fl + PID;
+  //int v_fr = m_fr + PID;
+  //int v_br = m_br + PID;
+  //int v_bl = m_bl + PID;
+  //int v_fl = m_fl + PID;
+
+  int v_fr = PID;
+  int v_br = PID;
+  int v_bl = PID;
+  int v_fl = PID;
 
   v_fr = constrain(v_fr, -255, 255);
   v_br = constrain(v_br, -255, 255);
