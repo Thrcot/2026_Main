@@ -67,17 +67,17 @@ const int LED[8] = {LED1, LED2, LED3, LED4, LED5, LED6, LED7, LED8};
 
 //  PWM
 // FL
-#define FL_FWD PC6
-#define FL_REV PC7
+#define FL_FWD PC7
+#define FL_REV PC6
 // BL
-#define BL_FWD PC8
-#define BL_REV PC9
+#define BL_FWD PC9
+#define BL_REV PC8
 // BR
-#define BR_FWD PA8
-#define BR_REV PA9
+#define BR_FWD PA9
+#define BR_REV PA8
 // FR
-#define FR_FWD PA10
-#define FR_REV PA11
+#define FR_FWD PA11
+#define FR_REV PA10
 //   Dribble
 #define TIM4_CH1 PB6
 #define TIM4_CH2 PB7
@@ -114,11 +114,14 @@ Adafruit_BNO055 bno = Adafruit_BNO055(55, BNO055_ADDR, &Wire2);
 // HALハンドラ
 ADC_HandleTypeDef hadc1;
 DMA_HandleTypeDef hdma_adc1;
-TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim6;
+
+HardwareTimer *tim6 = new HardwareTimer(TIM6);
 
 // DMA Buffer
 uint16_t adc_buf[SENSOR_CH * SAMPLE_NUM];
-uint16_t sensor_avg[SENSOR_CH];
+volatile uint16_t sensor_avg[SENSOR_CH];
 volatile bool adc_ready = false;
 
 // MARK: constants
@@ -130,12 +133,15 @@ int PWM_limit = 230; // yukuyukuMD MAX is 230.
 int speed = 80; //0~255
 double Kp = 0.5;
 double Ki = 0.0;
-double Kd = 0.0;
+double Kd = 0.07;
+double preTime = 0.0;
+double preHeading = 0.0;
+double P = 0.0, I = 0.0, D = 0.0, preP = 0.0;
 
 double headingOffset = 0.0;
-
+double prevTime = 0.0;
 // MARK: function
-void TIM3_Init(void);
+void TIM2_Init(void);
 void ADC1_DMA_Init(void);
 void processADC();
 double wrapAngle180(double angle);
@@ -143,11 +149,14 @@ void writeEEPROM(int addr, byte data);
 byte readEEPROM(int addr);
 Ball getBall();
 double getBallAngle();
+double getHeadingGyro();
 double getHeading();
+double getGyroZ();
+void getIMU(double *heading, double *gyroZ);
 int16_t getLineAngle();
 void motor_test();
 void setMotor(int pwm, int MDpin1, int MDpin2);
-void move_motor(int speed, double target_angle, double heading, double tarHeading);
+void move_motor(int speed, double target_angle, double heading, double gyroZ, double tarHeading);
 void kick();
 void lcd_drawarrow(double angle);
 void lcd_drawLineSensors(bool lineSensor[19]);
@@ -242,6 +251,7 @@ void setup() {
   pinMode(Option, INPUT);
 
   // bno setup
+  SerialPC.println("[Debug] BNO initialize");
   while (!bno.begin(OPERATION_MODE_IMUPLUS)) {
     for (int i = 0; i < 8; i++) {
     digitalWrite(LED[i], !digitalRead(LED[i]));
@@ -252,14 +262,18 @@ void setup() {
     digitalWrite(LED[i], LOW);
   }
   bno.setExtCrystalUse(true);
+  //bno.setMode(OPERATION_MODE_IMUPLUS);
+  delay(500);
+  resetHeadingZero();
 
   // line sensor setup
   line_threshold = loadLineThreshold();
   setLineThreshold(line_threshold);      // ラインセンサ側に送信
 
   // ADC DMA Init
+  SerialPC.println("[Debug] DMA ADC initialize");
   ADC1_DMA_Init();
-  TIM3_Init();
+  TIM2_Init();
   HAL_ADC_Start_DMA(&hadc1,
                     (uint32_t*)adc_buf,
                     SENSOR_CH * SAMPLE_NUM);
@@ -267,6 +281,8 @@ void setup() {
   delay(1000);
   display.clearDisplay();
   display.display();
+
+  SerialPC.println("[Debug] Setup end");
 }
 
 
@@ -277,12 +293,12 @@ void loop() {
     processADC();
   }
   if(gameFlag == true){
+    SerialPC.println("[Debug] Game loop");
     static int16_t lastLineAngle = -1;
     static unsigned long lastLineTime = 0;
     static int lineAngle = -1;
     Ball b = getBall();
     double targetAngle = b.Angle;
-    double heading = getHeading();
     targetAngle = wrapAngle180(targetAngle * 1.3);
 
     display.clearDisplay();
@@ -299,7 +315,14 @@ void loop() {
     targetAngle = wrapAngle180((double)lastLineAngle);
   }
 
-  move_motor(speed, targetAngle, heading, 0.0);
+  double heading;
+  double gyroZ;
+
+  getIMU(&heading, &gyroZ);
+
+  move_motor(speed, targetAngle, heading, gyroZ, 0.0);
+
+  SerialPC.println(gyroZ);
 
   //kick();
 
@@ -320,22 +343,24 @@ void loop() {
   }
 }
 
-void TIM3_Init(void) {
-  __HAL_RCC_TIM3_CLK_ENABLE();
+void TIM2_Init(void) {
 
-  htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 83;   // 84MHz → 1MHz
-  htim3.Init.Period = 499;     // 1MHz/500 = 2kHz
-  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  __HAL_RCC_TIM2_CLK_ENABLE();
 
-  HAL_TIM_Base_Init(&htim3);
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 83;   // 84MHz → 1MHz
+  htim2.Init.Period = 499;     // 1MHz / 500 = 2kHz
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+
+  HAL_TIM_Base_Init(&htim2);
 
   TIM_MasterConfigTypeDef sMasterConfig;
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig);
 
-  HAL_TIM_Base_Start(&htim3);
+  HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig);
+
+  HAL_TIM_Base_Start(&htim2);
 }
 
 void ADC1_DMA_Init(void) {
@@ -364,7 +389,7 @@ void ADC1_DMA_Init(void) {
   hadc1.Init.ScanConvMode = ENABLE;
   hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
-  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T3_TRGO;
+  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIGCONV_T2_TRGO;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc1.Init.NbrOfConversion = SENSOR_CH;
   hadc1.Init.DMAContinuousRequests = ENABLE;
@@ -409,8 +434,7 @@ void ADC1_DMA_Init(void) {
 }
 
 void processADC() {
-  for(int ch=0; ch<SENSOR_CH; ch++)
-  {
+  for(int ch=0; ch<SENSOR_CH; ch++) {
     uint32_t sum = 0;
     for(int i=0;i<SAMPLE_NUM;i++)
       sum += adc_buf[ch + i*SENSOR_CH];
@@ -537,13 +561,55 @@ uint8_t loadLineThreshold() {
   return val;
 }
 
+double getHeadingGyro() {
+  if(prevTime == 0){
+    prevTime = micros();
+    return 0;
+  }
+  static double heading = 0.0;
+  static uint32_t prevTime = 0;
+
+  imu::Vector<3> gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
+  double gyroZ = gyro.z();   // deg/s
+
+  uint32_t now = micros();
+  double dt = (now - prevTime) / 1000000.0;
+  prevTime = now;
+
+  heading += gyroZ * dt;
+
+  // -180〜180に正規化
+  while (heading > 180) heading -= 360;
+  while (heading < -180) heading += 360;
+
+  return heading;
+}
 
 double getHeading() {
   sensors_event_t ev;
   bno.getEvent(&ev);
-  double raw = wrapAngle180(ev.orientation.x);
-  double heading = wrapAngle180(raw - headingOffset);
-  return heading;
+
+  double raw = ev.orientation.x;   // 0-360
+  double heading = raw - headingOffset;
+
+  return wrapAngle180(heading);
+}
+
+double getGyroZ() {
+  sensors_event_t ev;
+  bno.getEvent(&ev);
+
+  double gyroZ = ev.gyro.z * 57.2958; // rad/s → deg/s
+  return gyroZ;
+}
+
+void getIMU(double *heading, double *gyroZ) {
+  sensors_event_t ev;
+  bno.getEvent(&ev);
+
+  float raw = ev.orientation.x;
+  *heading = wrapAngle180((double)raw - headingOffset);
+  *gyroZ = ev.gyro.z * 57.2958; // deg/s
 }
 
 void resetHeadingZero() {
@@ -584,37 +650,57 @@ void setMotor(int pwm, int MDpin1, int MDpin2) {
   }
 }
 
-void move_motor(int speed, double target_angle, double heading, double tarHeading) {
-  //PID
-  static unsigned long prevTime = 0;
-  static double prevErr = 0.0;
-  double PID = 0.0;
-
+void move_motor(int speed, double target_angle, double heading, double gyroZ, double tarHeading) {
   unsigned long currentTime = micros();
-  double dt = (currentTime - prevTime) / 1000000.0;
+  double dt = (currentTime - preTime) / 1000000.0;
+  if (dt < 0.001) return;
+  preTime = currentTime;
 
-  double err = wrapAngle180(heading - tarHeading);
-  double dErr =  (err - prevErr) / dt;
-  prevErr = err;
-  prevTime = currentTime;
-  PID = Kp * err + Kd * dErr;
+  P = wrapAngle180(tarHeading - heading);
 
-  //Ball
+  I += P * dt;
+  I = constrain(I, -180.0, 180.0);
+
+  /*
+  double dHeading = wrapAngle180(heading - preHeading);
+  double rawpassD = -dHeading / dt;
+  D = 0.9 * D + 0.1 * rawpassD;
+  preHeading = heading;
+  preP = P;
+
+  double PID = Kp * P + Kd * D;
+
+  int omega = (int)PID;
+
+  // モーター特性デッドゾーン追加
+  if (abs(omega) < 8) omega = 0;
+    // IMUの誤差
+  if (abs(P) < 2.0) {
+    omega = 0;
+  }
+  */
+
+double PID = Kp * P - Kd * gyroZ;
+
+int omega = PID;
+
+if (abs(omega) < 4) omega = 0;
+if (abs(P) < 2) omega = 0;
+
   int m_fr = (int)(speed * -cos(radians(target_angle + 45.0)));
   int m_br = (int)(speed * -cos(radians(target_angle - 45.0)));
   int m_bl = (int)(speed * cos(radians(target_angle + 45.0)));
   int m_fl = (int)(speed * cos(radians(target_angle - 45.0)));
 
-  //Rotation
-  //int v_fr = m_fr + PID;
-  //int v_br = m_br + PID;
-  //int v_bl = m_bl + PID;
-  //int v_fl = m_fl + PID;
+  //int v_fr = m_fr + omega;
+  //int v_br = m_br + omega;
+  //int v_bl = m_bl + omega;
+  //int v_fl = m_fl + omega;
 
-  int v_fr = PID;
-  int v_br = PID;
-  int v_bl = PID;
-  int v_fl = PID;
+  int v_fr = omega;
+  int v_br = omega;
+  int v_bl = omega;
+  int v_fl = omega;
 
   v_fr = constrain(v_fr, -255, 255);
   v_br = constrain(v_br, -255, 255);
