@@ -125,11 +125,10 @@ volatile bool adc_ready = false;
 bool gameFlag = false;
 uint8_t line_threshold = 155; //デフォルト(仮)
 
-int PWM_limit = 50; // yukuyukuMD MAX is 230.
+int PWM_limit = 230; // yukuyukuMD MAX is 230.
 
-int speed = 170; //0~255
-int PID_limit = 60; //0~255
-double Kp = 0.05;
+int speed = 80; //0~255
+double Kp = 0.5;
 double Ki = 0.0;
 double Kd = 0.0;
 
@@ -163,7 +162,6 @@ uint8_t loadLineThreshold();
 // HAL Callback
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
   adc_ready = true;
-  SerialPC.println("DMA Done");
 }
 
 extern "C" void DMA2_Stream0_IRQHandler(void) {
@@ -595,12 +593,11 @@ void move_motor(int speed, double target_angle, double heading, double tarHeadin
   unsigned long currentTime = micros();
   double dt = (currentTime - prevTime) / 1000000.0;
 
-  double err = wrapAngle180(tarHeading - heading);
+  double err = wrapAngle180(heading - tarHeading);
   double dErr =  (err - prevErr) / dt;
   prevErr = err;
   prevTime = currentTime;
   PID = Kp * err + Kd * dErr;
-  PID = constrain(PID, -PID_limit, PID_limit);
 
   //Ball
   int m_fr = (int)(speed * -cos(radians(target_angle + 45.0)));
