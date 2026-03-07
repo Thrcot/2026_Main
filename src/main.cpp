@@ -131,7 +131,7 @@ uint8_t line_threshold = 155; //デフォルト(仮)
 
 int PWM_limit = 230; // yukuyukuMD MAX is 230.
 
-int speed = 80; //0~255
+int basespeed = 80; //0~255
 double Kp = 0.44;
 double Ki = 0.0;
 double Kd = 0.03;
@@ -301,9 +301,19 @@ void loop() {
     static int16_t lastLineAngle = -1;
     static unsigned long lastLineTime = 0;
     static int lineAngle = -1;
+    double speed = basespeed;
+
     Ball b = getBall();
     double targetAngle = b.Angle;
-    targetAngle = wrapAngle180(targetAngle * 1.3);
+    if (b.Distance >= 210) {
+      double rad = b.Angle * PI / 180.0;
+      targetAngle = b.Angle + 50 * sin(rad);
+      speed = basespeed * (0.7 + 0.3 * abs(cos(rad)));
+    } else if (b.Distance >= 150) {
+      speed = basespeed;
+    } else {
+      speed = 0;
+    }
 
     display.clearDisplay();
     lcd_drawarrow(targetAngle);
@@ -531,8 +541,7 @@ Ball getBall() {
   for(int i = 0; i < SENSOR_CH; i++){
 
     // ===== 角度用 weight（正規化） =====
-    double val = (double)(max_val - sensor_avg[i]) /
-                 (max_val - min_val + 1);
+    double val = (double)(max_val - sensor_avg[i]) / (max_val - min_val + 1);
 
     double weight_angle = val * val;
 
@@ -556,6 +565,7 @@ Ball getBall() {
   ballinfo.Angle = angle;
 
   // ----- 距離 -----
+  distance_sum /= 100.0;
   ballinfo.Distance = distance_sum;
 
   return ballinfo;
