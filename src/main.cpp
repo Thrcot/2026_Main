@@ -131,9 +131,9 @@ uint8_t line_threshold = 155; //デフォルト(仮)
 int PWM_limit = 230; // yukuyukuMD MAX is 230.
 
 int speed = 80; //0~255
-double Kp = 0.5;
+double Kp = 0.44;
 double Ki = 0.0;
-double Kd = 0.07;
+double Kd = 0.03;
 double preTime = 0.0;
 double preHeading = 0.0;
 double P = 0.0, I = 0.0, D = 0.0, preP = 0.0;
@@ -149,7 +149,6 @@ void writeEEPROM(int addr, byte data);
 byte readEEPROM(int addr);
 Ball getBall();
 double getBallAngle();
-double getHeadingGyro();
 double getHeading();
 double getGyroZ();
 void getIMU(double *heading, double *gyroZ);
@@ -561,30 +560,6 @@ uint8_t loadLineThreshold() {
   return val;
 }
 
-double getHeadingGyro() {
-  if(prevTime == 0){
-    prevTime = micros();
-    return 0;
-  }
-  static double heading = 0.0;
-  static uint32_t prevTime = 0;
-
-  imu::Vector<3> gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);
-  double gyroZ = gyro.z();   // deg/s
-
-  uint32_t now = micros();
-  double dt = (now - prevTime) / 1000000.0;
-  prevTime = now;
-
-  heading += gyroZ * dt;
-
-  // -180〜180に正規化
-  while (heading > 180) heading -= 360;
-  while (heading < -180) heading += 360;
-
-  return heading;
-}
-
 double getHeading() {
   sensors_event_t ev;
   bno.getEvent(&ev);
@@ -596,20 +571,20 @@ double getHeading() {
 }
 
 double getGyroZ() {
-  sensors_event_t ev;
-  bno.getEvent(&ev);
+  sensors_event_t gyro;
+  bno.getEvent(&gyro, Adafruit_BNO055::VECTOR_GYROSCOPE);
 
-  double gyroZ = ev.gyro.z * 57.2958; // rad/s → deg/s
-  return gyroZ;
+  return gyro.gyro.z * 57.2958;
 }
 
 void getIMU(double *heading, double *gyroZ) {
-  sensors_event_t ev;
+  sensors_event_t ev, gyro;
   bno.getEvent(&ev);
+  bno.getEvent(&gyro, Adafruit_BNO055::VECTOR_GYROSCOPE);
 
   float raw = ev.orientation.x;
   *heading = wrapAngle180((double)raw - headingOffset);
-  *gyroZ = ev.gyro.z * 57.2958; // deg/s
+  *gyroZ = gyro.gyro.z * 57.2958; // deg/s
 }
 
 void resetHeadingZero() {
@@ -661,7 +636,6 @@ void move_motor(int speed, double target_angle, double heading, double gyroZ, do
   I += P * dt;
   I = constrain(I, -180.0, 180.0);
 
-  /*
   double dHeading = wrapAngle180(heading - preHeading);
   double rawpassD = -dHeading / dt;
   D = 0.9 * D + 0.1 * rawpassD;
@@ -670,22 +644,22 @@ void move_motor(int speed, double target_angle, double heading, double gyroZ, do
 
   double PID = Kp * P + Kd * D;
 
-  int omega = (int)PID;
+  //double gyroLPF = 0;
 
-  // モーター特性デッドゾーン追加
-  if (abs(omega) < 8) omega = 0;
-    // IMUの誤差
-  if (abs(P) < 2.0) {
-    omega = 0;
-  }
-  */
+  //gyroLPF = gyroLPF * 0.8 + gyroZ * 0.2;
+  //double PID = Kp * P - Kd * gyroLPF;
 
-double PID = Kp * P - Kd * gyroZ;
+  double omega = PID;
 
-int omega = PID;
+  if (abs(omega) < 4.0) omega = 0;
+  if (abs(P) < 2.0 && abs(gyroZ) < 2.0) omega = 0;
 
-if (abs(omega) < 4) omega = 0;
-if (abs(P) < 2) omega = 0;
+  SerialPC.print(">P:");
+  SerialPC.println(P);
+  SerialPC.print(">D:");
+  SerialPC.println(D);
+  SerialPC.print(">PID:");
+  SerialPC.println(PID);
 
   int m_fr = (int)(speed * -cos(radians(target_angle + 45.0)));
   int m_br = (int)(speed * -cos(radians(target_angle - 45.0)));
@@ -697,10 +671,10 @@ if (abs(P) < 2) omega = 0;
   //int v_bl = m_bl + omega;
   //int v_fl = m_fl + omega;
 
-  int v_fr = omega;
-  int v_br = omega;
-  int v_bl = omega;
-  int v_fl = omega;
+  int v_fr = (int)omega;
+  int v_br = (int)omega;
+  int v_bl = (int)omega;
+  int v_fl = (int)omega;
 
   v_fr = constrain(v_fr, -255, 255);
   v_br = constrain(v_br, -255, 255);
