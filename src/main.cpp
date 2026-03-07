@@ -515,48 +515,48 @@ byte readEEPROM(int addr) {
 }
 
 Ball getBall() {
-  double X = 0.0;
-  double Y = 0.0;
+  double X = 0;
+  double Y = 0;
+  double distance_sum = 0;
 
   uint16_t min_val = sensor_avg[0];
   uint16_t max_val = sensor_avg[0];
 
+  // min / max 取得（角度計算用）
   for(int i = 0; i < SENSOR_CH; i++){
     if(sensor_avg[i] < min_val) min_val = sensor_avg[i];
     if(sensor_avg[i] > max_val) max_val = sensor_avg[i];
   }
 
-  double total = 0;
-
   for(int i = 0; i < SENSOR_CH; i++){
 
-    double val = (double)(max_val - sensor_avg[i]) / (max_val - min_val + 1);
+    // ===== 角度用 weight（正規化） =====
+    double val = (double)(max_val - sensor_avg[i]) /
+                 (max_val - min_val + 1);
 
-    if(val < 0.05) continue;
-
-    double weight = val * val;
+    double weight_angle = val * val;
 
     double rad = BALLANGLE[i] * PI / 180.0;
 
-    X += weight * cos(rad);
-    Y += weight * sin(rad);
+    X += weight_angle * cos(rad);
+    Y += weight_angle * sin(rad);
 
-    total += weight;
+    // ===== 距離用 weight（生強度） =====
+    double weight_dist = 4095 - sensor_avg[i];
+
+    distance_sum += weight_dist;
   }
 
   Ball ballinfo;
 
-  double angle = atan2(Y,X) * 180.0 / PI;
+  // ----- 角度 -----
+  double angle = atan2(Y, X) * 180.0 / PI;
   angle = wrapAngle180(angle);
+
   ballinfo.Angle = angle;
 
-  double strength = 0;
-
-  for(int i=0;i<SENSOR_CH;i++) {
-      strength += max_val - sensor_avg[i];
-  }
-
-  ballinfo.Distance = strength;
+  // ----- 距離 -----
+  ballinfo.Distance = distance_sum;
 
   return ballinfo;
 }
