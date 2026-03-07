@@ -515,32 +515,48 @@ byte readEEPROM(int addr) {
 }
 
 Ball getBall() {
-  double X = 0.0, Y = 0.0;
+  double X = 0.0;
+  double Y = 0.0;
+
   uint16_t min_val = sensor_avg[0];
   uint16_t max_val = sensor_avg[0];
 
   for(int i = 0; i < SENSOR_CH; i++){
-    if(sensor_avg[i] < min_val)
-      min_val = sensor_avg[i];
-    if(sensor_avg[i] > max_val)
-      max_val = sensor_avg[i];
+    if(sensor_avg[i] < min_val) min_val = sensor_avg[i];
+    if(sensor_avg[i] > max_val) max_val = sensor_avg[i];
   }
 
+  double total = 0;
+
   for(int i = 0; i < SENSOR_CH; i++){
-    double weight = max_val - sensor_avg[i];  // 小さいほど強い
+
+    double val = (double)(max_val - sensor_avg[i]) / (max_val - min_val + 1);
+
+    if(val < 0.05) continue;
+
+    double weight = val * val;
 
     double rad = BALLANGLE[i] * PI / 180.0;
+
     X += weight * cos(rad);
     Y += weight * sin(rad);
+
+    total += weight;
   }
 
   Ball ballinfo;
 
-  double angle = atan2(Y, X) * 180.0 / PI;
+  double angle = atan2(Y,X) * 180.0 / PI;
   angle = wrapAngle180(angle);
-
   ballinfo.Angle = angle;
-  ballinfo.Distance = min_val;
+
+  double strength = 0;
+
+  for(int i=0;i<SENSOR_CH;i++) {
+      strength += max_val - sensor_avg[i];
+  }
+
+  ballinfo.Distance = strength;
 
   return ballinfo;
 }
@@ -992,7 +1008,10 @@ void lcd_menu(){
     display.setCursor(0,0);
     display.print("Angle:");
     display.print(ball.Angle);
-    display.setCursor(10,8);
+    display.setCursor(0,8);
+    display.print(" Distance:");
+    display.println(ball.Distance);
+    display.setCursor(10,16);
     display.println(">Back");
     display.display();
   }
