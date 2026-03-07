@@ -112,7 +112,8 @@ Adafruit_BNO055 bno = Adafruit_BNO055(55, BNO055_ADDR, &Wire2);
 #define SAMPLE_NUM 32
 
 // HALハンドラ
-ADC_HandleTypeDef hadc1;
+ADC_HandleTypeDef hadc1; //DMA
+ADC_HandleTypeDef hadc2; //Kicker
 DMA_HandleTypeDef hdma_adc1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim6;
@@ -143,7 +144,9 @@ double prevTime = 0.0;
 // MARK: function
 void TIM2_Init(void);
 void ADC1_DMA_Init(void);
+void ADC2_Init(void);
 void processADC();
+uint16_t readCatch();
 double wrapAngle180(double angle);
 void writeEEPROM(int addr, byte data);
 byte readEEPROM(int addr);
@@ -239,8 +242,6 @@ void setup() {
   pinMode(TIM4_CH2, OUTPUT);
 
   pinMode(Kick, OUTPUT);
-  pinMode(ADCCatch, INPUT);
-
   digitalWrite(Kick, LOW);
 
   pinMode(Back, INPUT);
@@ -265,6 +266,7 @@ void setup() {
   delay(500);
   resetHeadingZero();
 
+  SerialPC.println("[Debug] Line initialize");
   // line sensor setup
   line_threshold = loadLineThreshold();
   setLineThreshold(line_threshold);      // ラインセンサ側に送信
@@ -276,6 +278,9 @@ void setup() {
   HAL_ADC_Start_DMA(&hadc1,
                     (uint32_t*)adc_buf,
                     SENSOR_CH * SAMPLE_NUM);
+
+  SerialPC.println("[Debug] Kicker initialize");
+  ADC2_Init();
 
   delay(1000);
   display.clearDisplay();
@@ -310,20 +315,20 @@ void loop() {
       lastLineTime = millis();
     }
 
-  if(lastLineAngle != -1 && (millis() - lastLineTime) < 500){ // 200ms間は回避
-    targetAngle = wrapAngle180((double)lastLineAngle);
-  }
+    if(lastLineAngle != -1 && (millis() - lastLineTime) < 500){ // 200ms間は回避
+      targetAngle = wrapAngle180((double)lastLineAngle);
+    }
 
-  double heading;
-  double gyroZ;
+    double heading;
+    double gyroZ;
 
-  getIMU(&heading, &gyroZ);
+    getIMU(&heading, &gyroZ);
 
-  move_motor(speed, targetAngle, heading, gyroZ, 0.0);
+    move_motor(speed, targetAngle, heading, gyroZ, 0.0);
 
-  SerialPC.println(gyroZ);
+    SerialPC.println(gyroZ);
 
-  //kick();
+    kick();
 
     if (!digitalRead(Pause)) {
       gameFlag = false;
@@ -432,6 +437,35 @@ void ADC1_DMA_Init(void) {
   HAL_NVIC_EnableIRQ(DMA2_Stream0_IRQn);
 }
 
+void ADC2_Init(void) {
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_ADC2_CLK_ENABLE();
+
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  GPIO_InitStruct.Pin = GPIO_PIN_4;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  hadc2.Instance = ADC2;
+  hadc2.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc2.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc2.Init.ScanConvMode = DISABLE;
+  hadc2.Init.ContinuousConvMode = DISABLE;
+  hadc2.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc2.Init.NbrOfConversion = 1;
+
+  HAL_ADC_Init(&hadc2);
+
+  ADC_ChannelConfTypeDef sConfig;
+  sConfig.Channel = ADC_CHANNEL_4;
+  sConfig.Rank = 1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_144CYCLES;
+
+  HAL_ADC_ConfigChannel(&hadc2, &sConfig);
+}
+
 void processADC() {
   for(int ch=0; ch<SENSOR_CH; ch++) {
     uint32_t sum = 0;
@@ -440,6 +474,14 @@ void processADC() {
 
     sensor_avg[ch] = sum / SAMPLE_NUM;
   }
+}
+
+uint16_t readCatch() {
+  HAL_ADC_Start(&hadc2);
+  HAL_ADC_PollForConversion(&hadc2, 10);
+  uint16_t val = HAL_ADC_GetValue(&hadc2);
+  HAL_ADC_Stop(&hadc2);
+  return val;
 }
 
 double wrapAngle180(double angle) {
@@ -654,27 +696,31 @@ void move_motor(int speed, double target_angle, double heading, double gyroZ, do
   if (abs(omega) < 4.0) omega = 0;
   if (abs(P) < 2.0 && abs(gyroZ) < 2.0) omega = 0;
 
+  /*
   SerialPC.print(">P:");
   SerialPC.println(P);
   SerialPC.print(">D:");
   SerialPC.println(D);
   SerialPC.print(">PID:");
   SerialPC.println(PID);
+  */
 
   int m_fr = (int)(speed * -cos(radians(target_angle + 45.0)));
   int m_br = (int)(speed * -cos(radians(target_angle - 45.0)));
   int m_bl = (int)(speed * cos(radians(target_angle + 45.0)));
   int m_fl = (int)(speed * cos(radians(target_angle - 45.0)));
 
-  //int v_fr = m_fr + omega;
-  //int v_br = m_br + omega;
-  //int v_bl = m_bl + omega;
-  //int v_fl = m_fl + omega;
+  int v_fr = m_fr + (int)omega;
+  int v_br = m_br + (int)omega;
+  int v_bl = m_bl + (int)omega;
+  int v_fl = m_fl + (int)omega;
 
+  /*
   int v_fr = (int)omega;
   int v_br = (int)omega;
   int v_bl = (int)omega;
   int v_fl = (int)omega;
+  */
 
   v_fr = constrain(v_fr, -255, 255);
   v_br = constrain(v_br, -255, 255);
@@ -731,7 +777,8 @@ void motor_test(){
 void kick() {
   static bool catching = false;
   static uint32_t lastCatchTime = 0;
-  if (analogRead(ADCCatch) < 200) { //ボール保持判定
+  uint16_t catchval = readCatch();
+  if (catchval < 200) { //ボール保持判定
     if (!catching) {
       lastCatchTime = millis();
       catching = true;
