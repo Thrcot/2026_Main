@@ -339,7 +339,7 @@ void loop() {
       lastLineTime = millis();
     }
 
-    if(lastLineAngle != -1 && (millis() - lastLineTime) < 1000){  // 1000msは後退する
+    if(lastLineAngle != -1 && (millis() - lastLineTime) < 50){  // 50msは後退する
       targetAngle = wrapAngle180((double)lastLineAngle);
     }
 
