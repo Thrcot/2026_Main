@@ -301,6 +301,8 @@ void loop() {
     static int16_t lastLineAngle = -1;
     static unsigned long lastLineTime = 0;
     static int lineAngle = -1;
+    static unsigned long lastHeadingTime = 0;
+    static int targetHeading = 0;
     double speed = basespeed;
 
     Ball b = getBall();
@@ -333,14 +335,24 @@ void loop() {
     lcd_drawarrow(targetAngle);
     display.display();
 
-    lineAngle = getLineAngle();
+    lineAngle = getLineAngle();   //ライン踏んだ時の移動角
     if(lineAngle != -1){
       lastLineAngle = lineAngle;
       lastLineTime = millis();
+      if(lineAngle > 45 && lineAngle < 135){
+        targetHeading = 45;
+        lastHeadingTime = millis();
+      }else if(lineAngle > 225 && lineAngle < 315){
+        targetHeading = -45;
+        lastHeadingTime = millis();
+      }
     }
 
     if(lastLineAngle != -1 && (millis() - lastLineTime) < 50){  // 50msは後退する
       targetAngle = wrapAngle180((double)lastLineAngle);
+    }
+    if(targetHeading != 0 && (millis() - lastHeadingTime) > 500){ // ライン踏んでから0.5秒後には目標角度をリセット
+      targetHeading = 0;
     }
 
     double heading;
@@ -348,7 +360,7 @@ void loop() {
 
     getIMU(&heading, &gyroZ);
 
-    move_motor(speed, targetAngle, heading, gyroZ, 0.0);
+    move_motor(speed, targetAngle, heading, gyroZ, targetHeading);
 
     SerialPC.println(gyroZ);
 
