@@ -305,10 +305,24 @@ void loop() {
 
     Ball b = getBall();
     double targetAngle = b.Angle;
+
+    static double prevBallErr = 0;
+    double ballErr = b.Angle;
+    double dBallErr = ballErr - prevBallErr;
+    prevBallErr = ballErr;
+
+    double KP_ball = 0.2;
+    double KD_ball = 0.0;
+
+    double pd = KP_ball * ballErr + KD_ball * dBallErr;
+
     if (b.Distance >= 210) {
       double rad = b.Angle * PI / 180.0;
-      targetAngle = b.Angle + 50 * sin(rad);
+
+      targetAngle = b.Angle + 50 * sin(rad) + pd;
+
       speed = basespeed * (0.7 + 0.3 * abs(cos(rad)));
+
     } else if (b.Distance >= 150) {
       speed = basespeed;
     } else {
@@ -325,7 +339,7 @@ void loop() {
       lastLineTime = millis();
     }
 
-    if(lastLineAngle != -1 && (millis() - lastLineTime) < 500){ // 200ms間は回避
+    if(lastLineAngle != -1 && (millis() - lastLineTime) < 1000){  // 1000msは後退する
       targetAngle = wrapAngle180((double)lastLineAngle);
     }
 
