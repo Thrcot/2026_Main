@@ -116,9 +116,6 @@ ADC_HandleTypeDef hadc1; //DMA
 ADC_HandleTypeDef hadc2; //Kicker
 DMA_HandleTypeDef hdma_adc1;
 TIM_HandleTypeDef htim2;
-TIM_HandleTypeDef htim6;
-
-HardwareTimer *tim6 = new HardwareTimer(TIM6);
 
 // DMA Buffer
 uint16_t adc_buf[SENSOR_CH * SAMPLE_NUM];
@@ -127,6 +124,7 @@ volatile bool adc_ready = false;
 
 // MARK: constants
 bool gameFlag = false;
+bool ImAttacker = true; // true: Attacker, false: Keeper
 uint8_t line_threshold = 155; //デフォルト(仮)
 
 int PWM_limit = 230; // yukuyukuMD MAX is 230.
@@ -139,8 +137,13 @@ double preTime = 0.0;
 double preHeading = 0.0;
 double P = 0.0, I = 0.0, D = 0.0, preP = 0.0;
 
+double KP_ball = 0.2;
+double KD_ball = 0.0;
+
+
 double headingOffset = 0.0;
 double prevTime = 0.0;
+
 // MARK: function
 void TIM2_Init(void);
 void ADC1_DMA_Init(void);
@@ -297,86 +300,87 @@ void loop() {
     processADC();
   }
   if(gameFlag == true){
-    SerialPC.println("[Debug] Game loop");
-    static int16_t lastLineAngle = -1;
-    static unsigned long lastLineTime = 0;
-    static int lineAngle = -1;
-    static unsigned long lastHeadingTime = 0;
-    static int targetHeading = 0;
-    double speed = basespeed;
+    if (ImAttacker == true) {
+      // Attacker algorithm
+      SerialPC.println("[Debug] Game loop");
+      static int16_t lastLineAngle = -1;
+      static unsigned long lastLineTime = 0;
+      static int lineAngle = -1;
+      static unsigned long lastHeadingTime = 0;
+      static int targetHeading = 0;
+      double speed = basespeed;
 
-    Ball b = getBall();
-    double targetAngle = b.Angle;
+      Ball b = getBall();
+      double targetAngle = b.Angle;
 
-    static double prevBallErr = 0;
-    double ballErr = b.Angle;
-    double dBallErr = ballErr - prevBallErr;
-    prevBallErr = ballErr;
+      static double prevBallErr = 0;
+      double ballErr = b.Angle;
+      double dBallErr = ballErr - prevBallErr;
+      prevBallErr = ballErr;
+      double pd = KP_ball * ballErr + KD_ball * dBallErr;
 
-    double KP_ball = 0.2;
-    double KD_ball = 0.0;
+      if (b.Distance >= 210) {
+        double rad = b.Angle * PI / 180.0;
 
-    double pd = KP_ball * ballErr + KD_ball * dBallErr;
+        targetAngle = b.Angle + 50 * sin(rad) + pd;
 
-    if (b.Distance >= 210) {
-      double rad = b.Angle * PI / 180.0;
+        speed = basespeed * (0.7 + 0.3 * abs(cos(rad)));
 
-      targetAngle = b.Angle + 50 * sin(rad) + pd;
+      } else if (b.Distance >= 150) {
+        speed = basespeed;
+      } else {
+        speed = 0;
+      }
 
-      speed = basespeed * (0.7 + 0.3 * abs(cos(rad)));
+      display.clearDisplay();
+      lcd_drawarrow(targetAngle);
+      display.display();
 
-    } else if (b.Distance >= 150) {
-      speed = basespeed;
+      lineAngle = getLineAngle();   //ライン踏んだ時の移動角
+      if(lineAngle != -1){
+        lastLineAngle = lineAngle;
+        lastLineTime = millis();
+        if(lineAngle > 45 && lineAngle < 135){
+          targetHeading = 45;
+          lastHeadingTime = millis();
+        }else if(lineAngle > 225 && lineAngle < 315){
+          targetHeading = -45;
+          lastHeadingTime = millis();
+        }
+      }
+
+      if(lastLineAngle != -1 && (millis() - lastLineTime) < 50){  // 50msは後退する
+        targetAngle = wrapAngle180((double)lastLineAngle);
+      }
+      if(targetHeading != 0 && (millis() - lastHeadingTime) > 500){ // ライン踏んでから0.5秒後には目標角度をリセット
+        targetHeading = 0;
+      }
+
+      double heading;
+      double gyroZ;
+
+      getIMU(&heading, &gyroZ);
+
+      move_motor(speed, targetAngle, heading, gyroZ, targetHeading);
+
+      SerialPC.println(gyroZ);
+
+      kick();
+
+      if (!digitalRead(Pause)) {
+        gameFlag = false;
+        setMotor(0, FL_FWD, FL_REV);
+        setMotor(0, BL_FWD, BL_REV);
+        setMotor(0, BR_FWD, BR_REV);
+        setMotor(0, FR_FWD, FR_REV);
+        for (int i = 0; i < 8; i++) {
+          digitalWrite(LED[i], LOW);
+        }
+      }
+      delay(1);
     } else {
-      speed = 0;
+      // Keeper algorithm
     }
-
-    display.clearDisplay();
-    lcd_drawarrow(targetAngle);
-    display.display();
-
-    lineAngle = getLineAngle();   //ライン踏んだ時の移動角
-    if(lineAngle != -1){
-      lastLineAngle = lineAngle;
-      lastLineTime = millis();
-      if(lineAngle > 45 && lineAngle < 135){
-        targetHeading = 45;
-        lastHeadingTime = millis();
-      }else if(lineAngle > 225 && lineAngle < 315){
-        targetHeading = -45;
-        lastHeadingTime = millis();
-      }
-    }
-
-    if(lastLineAngle != -1 && (millis() - lastLineTime) < 50){  // 50msは後退する
-      targetAngle = wrapAngle180((double)lastLineAngle);
-    }
-    if(targetHeading != 0 && (millis() - lastHeadingTime) > 500){ // ライン踏んでから0.5秒後には目標角度をリセット
-      targetHeading = 0;
-    }
-
-    double heading;
-    double gyroZ;
-
-    getIMU(&heading, &gyroZ);
-
-    move_motor(speed, targetAngle, heading, gyroZ, targetHeading);
-
-    SerialPC.println(gyroZ);
-
-    kick();
-
-    if (!digitalRead(Pause)) {
-      gameFlag = false;
-      setMotor(0, FL_FWD, FL_REV);
-      setMotor(0, BL_FWD, BL_REV);
-      setMotor(0, BR_FWD, BR_REV);
-      setMotor(0, FR_FWD, FR_REV);
-      for (int i = 0; i < 8; i++) {
-        digitalWrite(LED[i], LOW);
-      }
-    }
-    delay(1);
   }else{
     lcd_menu();
     delay(5);
