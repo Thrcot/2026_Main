@@ -92,7 +92,8 @@ TwoWire Wire2(I2C2_SDA, I2C2_SCL);
 #define BNO055_ADDR 0x28  //wire2
 #define EEPROM_ADDR 0x50  //wire2
 
-#define EE_LINE_THRESHOLD 0x0000  //EEPROMアドレス
+#define EE_LINE_THRESHOLD 0x0000  //EEPROMアドレス、1バイト保存
+#define EE_SPEED 0x0001 //EEPROMアドレス、1バイト保存
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
@@ -169,6 +170,8 @@ void resetHeadingZero();
 void setLineThreshold(uint8_t threshold);
 void saveLineThreshold(uint8_t threshold);
 uint8_t loadLineThreshold();
+void saveSpeed(uint8_t speed);
+uint8_t loadSpeed();
 
 // HAL Callback
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
@@ -271,6 +274,9 @@ void setup() {
   line_threshold = loadLineThreshold();
   setLineThreshold(line_threshold);      // ラインセンサ側に送信
 
+  // speed setup
+  basespeed = loadSpeed();
+
   // ADC DMA Init
   SerialPC.println("[Debug] DMA ADC initialize");
   ADC1_DMA_Init();
@@ -351,7 +357,7 @@ void loop() {
     if(lastLineAngle != -1 && (millis() - lastLineTime) < 50){  // 50msは後退する
       targetAngle = wrapAngle180((double)lastLineAngle);
     }
-    if(targetHeading != 0 && (millis() - lastHeadingTime) > 500){ // ライン踏んでから0.5秒後には目標角度をリセット
+    if(targetHeading != 0 && (millis() - lastHeadingTime) > 1000){ // ライン踏んでから1秒後には目標角度をリセット
       targetHeading = 0;
     }
 
@@ -654,6 +660,20 @@ uint8_t loadLineThreshold() {
   return val;
 }
 
+void saveSpeed(uint8_t speed){
+  writeEEPROM(EE_SPEED, speed);
+}
+
+uint8_t loadSpeed() {
+  uint8_t val = readEEPROM(EE_SPEED);
+
+  // 未書き込み or エラー対策
+  if (val == 0xFF) {
+    return basespeed; // デフォルト値（今使っている仮値）
+  }
+  return val;
+}
+
 double getHeading() {
   sensors_event_t ev;
   bno.getEvent(&ev);
@@ -881,8 +901,7 @@ void lcd_drawarrow(double angle) {
 void lcd_drawLineSensors(bool lineSensor[19]) {
   const int cx = 64;
   const int cy = 32;
-  const int r_ring = 20;  // 内側円の半径
-  const int r_outer = 30; // 外側センサ用半径
+  const int r_ring = 25;  // 内側円の半径
 
   // エンジェルリング（1〜16）
   for (int i = 0; i < 16; i++) {
@@ -890,32 +909,10 @@ void lcd_drawLineSensors(bool lineSensor[19]) {
       int x = cx + r_ring * cos(angle);
       int y = cy + r_ring * sin(angle);
       if (lineSensor[i]) {
-          display.fillCircle(x, y, 2, SSD1306_WHITE); // 反応ありは塗りつぶし
+          display.fillCircle(x, y, 3, SSD1306_WHITE); // 反応ありは塗りつぶし
       } else {
-          display.drawCircle(x, y, 2, SSD1306_WHITE); // 反応なしは輪郭だけ
+          display.drawCircle(x, y, 3, SSD1306_WHITE); // 反応なしは輪郭だけ
       }
-  }
-
-  // 外側センサ（17〜19）
-  // 左（17）
-  if (lineSensor[16]) {
-      display.fillRect(cx - r_outer -1, cy - 6, 3, 10, SSD1306_WHITE);
-  } else {
-      display.drawRect(cx - r_outer -1, cy - 6, 3, 10, SSD1306_WHITE);
-  }
-
-  // 後（18）
-  if (lineSensor[17]) {
-    display.fillRect(cx -4 , cy + r_outer - 3, 8, 3, SSD1306_WHITE);
-  } else {
-    display.drawRect(cx - 4, cy + r_outer - 3, 8, 3, SSD1306_WHITE);
-  }
-
-  // 右（19）
-  if (lineSensor[18]) {
-    display.fillRect(cx + r_outer -1, cy - 6, 3, 10, SSD1306_WHITE);
-  } else {
-    display.drawRect(cx + r_outer -1, cy - 6, 3, 10, SSD1306_WHITE);
   }
 }
 
@@ -1085,8 +1082,10 @@ void lcd_menu(){
     display.setCursor(10,16);
     display.println("line_check");
     display.setCursor(10,24);
-    display.println("BNO055_reset");
+    display.println("speed_setting");
     display.setCursor(10,32);
+    display.println("BNO055_reset");
+    display.setCursor(10,40);
     display.println("Back");
   }
   if(menu == 21){
@@ -1118,6 +1117,19 @@ void lcd_menu(){
     lcd_drawLineSensors(sensorValues);
   }
   if(menu == 24){
+    display.setCursor(0, cursor * 8 + 8);
+    display.print(">");
+    display.setCursor(10,0);
+    display.print("Speed:");
+    display.println(basespeed);
+    display.setCursor(10,8);
+    display.println("up");
+    display.setCursor(10,16);
+    display.println("down");
+    display.setCursor(10,24);
+    display.println("Back");
+  }
+  if(menu == 25){
     display.setCursor(0, cursor * 8);
     display.print(">");
     display.setCursor(10,0);
@@ -1231,6 +1243,10 @@ void lcd_menu(){
         cursor = 0;
       }
       else if(cursor == 4){
+        menu = 25;
+        cursor = 0;
+      }
+      else if(cursor == 5){
         menu = 0;
         cursor = 0;
       }
@@ -1268,6 +1284,20 @@ void lcd_menu(){
     }
     else if(menu == 24){
       if(cursor == 0){
+        basespeed++;
+        if(basespeed > 255) basespeed = 255;
+        saveSpeed(basespeed);
+      }else if(cursor == 1){
+        basespeed--;
+        if(basespeed < 0) basespeed = 0;
+        saveSpeed(basespeed);
+      }else if(cursor == 2){
+        menu = 20;
+        cursor = 0;
+      }
+    }
+    else if(menu == 25){
+      if(cursor == 0){
         resetHeadingZero();
         display.clearDisplay();
         display.setCursor(10,0);
@@ -1294,11 +1324,12 @@ void lcd_menu(){
     if(menu == 13 && cursor > 1) cursor = 0;
     if(menu == 14 && cursor > 1) cursor = 0;
     if(menu == 15 && cursor > 0) cursor = 0;
-    if(menu == 20 && cursor > 4) cursor = 0;
+    if(menu == 20 && cursor > 5) cursor = 0;
     if(menu == 21 && cursor > 1) cursor = 0;
     if(menu == 22 && cursor > 2) cursor = 0;
     if(menu == 23 && cursor > 1) cursor = 0;
-    if(menu == 24 && cursor > 0) cursor = 0;
+    if(menu == 24 && cursor > 2) cursor = 0;
+    if(menu == 25 && cursor > 0) cursor = 0;
   }
 
   if(prevBack && !nowBack){
@@ -1310,11 +1341,12 @@ void lcd_menu(){
     if(menu == 13 && cursor < 0) cursor = 1;
     if(menu == 14 && cursor < 0) cursor = 1;
     if(menu == 15 && cursor < 0) cursor = 0;
-    if(menu == 20 && cursor < 0) cursor = 4;
+    if(menu == 20 && cursor < 0) cursor = 5;
     if(menu == 21 && cursor < 0) cursor = 1;
     if(menu == 22 && cursor < 0) cursor = 2;
     if(menu == 23 && cursor < 0) cursor = 1;
-    if(menu == 24 && cursor < 0) cursor = 0;
+    if(menu == 24 && cursor < 0) cursor = 2;
+    if(menu == 25 && cursor < 0) cursor = 0;
   }
 
 
