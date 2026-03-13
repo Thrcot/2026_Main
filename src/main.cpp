@@ -1311,11 +1311,11 @@ void lcd_menu(){
     }
     else if(menu == 24){
       if(cursor == 0){
-        basespeed++;
+        basespeed = basespeed + 5;
         if(basespeed > 255) basespeed = 255;
         saveSpeed(basespeed);
       }else if(cursor == 1){
-        basespeed--;
+        basespeed = basespeed - 5;
         if(basespeed < 0) basespeed = 0;
         saveSpeed(basespeed);
       }else if(cursor == 2){
