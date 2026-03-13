@@ -94,6 +94,9 @@ TwoWire Wire2(I2C2_SDA, I2C2_SCL);
 
 #define EE_LINE_THRESHOLD 0x0000  //EEPROMアドレス、1バイト保存
 #define EE_SPEED 0x0001  //EEPROMアドレス、1バイト保存
+#define EE_PID_KP 0x0002  //EEPROMアドレス、8バイト保存
+#define EE_PID_KI 0x000A  //EEPROMアドレス、8バイト保存
+#define EE_PID_KD 0x0012  //EEPROMアドレス、8バイト保存
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
@@ -175,6 +178,8 @@ void saveLineThreshold(uint8_t threshold);
 uint8_t loadLineThreshold();
 void saveSpeed(uint8_t speed);
 uint8_t loadSpeed();
+void savePIDgain(double Kp, double Ki, double Kd);
+void loadPIDgain(double *Kp, double *Ki, double *Kd);
 
 // HAL Callback
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
@@ -279,6 +284,9 @@ void setup() {
 
   // Speed setup
   basespeed = loadSpeed();
+
+  // PID gain setup
+  loadPIDgain(&Kp, &Ki, &Kd);
 
   // ADC DMA Init
   SerialPC.println("[Debug] DMA ADC initialize");
@@ -676,6 +684,52 @@ uint8_t loadSpeed() {
     return basespeed; // デフォルト値（今使っている仮値）
   }
   return val;
+}
+
+void savePIDgain(double Kp, double Ki, double Kd){
+  byte *p;
+
+  p = (byte*)&Kp;
+  for(int i=0;i<8;i++){
+    writeEEPROM(EE_PID_KP + i, p[i]);
+  }
+
+  p = (byte*)&Ki;
+  for(int i=0;i<8;i++){
+    writeEEPROM(EE_PID_KI + i, p[i]);
+  }
+
+  p = (byte*)&Kd;
+  for(int i=0;i<8;i++){
+    writeEEPROM(EE_PID_KD + i, p[i]);
+  }
+}
+
+void loadPIDgain(double *Kp, double *Ki, double *Kd) {
+  double kp_eep;
+  double ki_eep;
+  double kd_eep;
+  byte *p;
+
+  p = (byte*)&kp_eep;
+  for(int i=0;i<8;i++){
+    p[i] = readEEPROM(EE_PID_KP + i);
+  }
+
+  p = (byte*)&ki_eep;
+  for(int i=0;i<8;i++){
+    p[i] = readEEPROM(EE_PID_KI + i);
+  }
+
+  p = (byte*)&kd_eep;
+  for(int i=0;i<8;i++){
+    p[i] = readEEPROM(EE_PID_KD + i);
+  }
+
+  // NaNでなければ反映
+  if(!isnan(kp_eep)) *Kp = kp_eep;
+  if(!isnan(ki_eep)) *Ki = ki_eep;
+  if(!isnan(kd_eep)) *Kd = kd_eep;
 }
 
 double getHeading() {
@@ -1111,8 +1165,10 @@ void lcd_menu(){
     display.setCursor(10,24);
     display.println("speed_setting");
     display.setCursor(10,32);
-    display.println("BNO055_reset");
+    display.println("PID_setting");
     display.setCursor(10,40);
+    display.println("BNO055_reset");
+    display.setCursor(10,48);
     display.println("Back");
   }
   if(menu == 21){
@@ -1157,6 +1213,57 @@ void lcd_menu(){
     display.println("Back");
   }
   if(menu == 25){
+    display.setCursor(0, cursor * 8);
+    display.print(">");
+    display.setCursor(10,0);
+    display.print("set P");
+    display.setCursor(10,8);
+    display.println("set I");
+    display.setCursor(10,16);
+    display.println("set D");
+    display.setCursor(10,24);
+    display.println("Back");
+  }
+  if(menu == 250){
+    display.setCursor(0, cursor * 8 + 8);
+    display.print(">");
+    display.setCursor(10,0);
+    display.print("Kp:");
+    display.println(Kp, 3);
+    display.setCursor(10,8);
+    display.println("up");
+    display.setCursor(10,16);
+    display.println("down");
+    display.setCursor(10,24);
+    display.println("Back");
+  }
+  if(menu == 251){
+    display.setCursor(0, cursor * 8 + 8);
+    display.print(">");
+    display.setCursor(10,0);
+    display.print("Ki:");
+    display.println(Ki, 3);
+    display.setCursor(10,8);
+    display.println("up");
+    display.setCursor(10,16);
+    display.println("down");
+    display.setCursor(10,24);
+    display.println("Back");
+  }
+  if(menu == 252){
+    display.setCursor(0, cursor * 8 + 8);
+    display.print(">");
+    display.setCursor(10,0);
+    display.print("Kd:");
+    display.println(Kd, 3);
+    display.setCursor(10,8);
+    display.println("up");
+    display.setCursor(10,16);
+    display.println("down");
+    display.setCursor(10,24);
+    display.println("Back");
+  }
+  if(menu == 26){
     display.setCursor(0, cursor * 8);
     display.print(">");
     display.setCursor(10,0);
@@ -1274,6 +1381,10 @@ void lcd_menu(){
         cursor = 0;
       }
       else if(cursor == 5){
+        menu = 26;
+        cursor = 0;
+      }
+      else if(cursor == 6){
         menu = 0;
         cursor = 0;
       }
@@ -1325,6 +1436,60 @@ void lcd_menu(){
     }
     else if(menu == 25){
       if(cursor == 0){
+        menu = 250;
+      }else if(cursor == 1){
+        menu = 251;
+      }else if(cursor == 2){
+        menu = 252;
+      }else if(cursor == 3){
+        menu = 20;
+        cursor = 0;
+      }
+    }
+    else if(menu == 250){
+      if(cursor == 0){
+        Kp = Kp + 0.001;
+        if(Kp > 1) Kp = 1;
+        savePIDgain(Kp, Ki, Kd);
+      }else if(cursor == 1){
+        Kp = Kp - 0.001;
+        if(Kp < 0) Kp = 0;
+        savePIDgain(Kp, Ki, Kd);
+      }else if(cursor == 2){
+        menu = 25;
+        cursor = 0;
+      }
+    }
+    else if(menu == 251){
+      if(cursor == 0){
+        Ki = Ki + 0.001;
+        if(Ki > 1) Ki = 1;
+        savePIDgain(Kp, Ki, Kd);
+      }else if(cursor == 1){
+        Ki = Ki - 0.001;
+        if(Ki < 0) Ki = 0;
+        savePIDgain(Kp, Ki, Kd);
+      }else if(cursor == 2){
+        menu = 25;
+        cursor = 0;
+      }
+    }
+    else if(menu == 252){
+      if(cursor == 0){
+        Kd = Kd + 0.001;
+        if(Kd > 1) Kd = 1;
+        savePIDgain(Kp, Ki, Kd);
+      }else if(cursor == 1){
+        Kd = Kd - 0.001;
+        if(Kd < 0) Kd = 0;
+        savePIDgain(Kp, Ki, Kd);
+      }else if(cursor == 2){
+        menu = 25;
+        cursor = 0;
+      }
+    }
+    else if(menu == 26){
+      if(cursor == 0){
         resetHeadingZero();
         display.clearDisplay();
         display.setCursor(10,0);
@@ -1351,12 +1516,16 @@ void lcd_menu(){
     if(menu == 13 && cursor > 1) cursor = 0;
     if(menu == 14 && cursor > 1) cursor = 0;
     if(menu == 15 && cursor > 0) cursor = 0;
-    if(menu == 20 && cursor > 5) cursor = 0;
+    if(menu == 20 && cursor > 6) cursor = 0;
     if(menu == 21 && cursor > 1) cursor = 0;
     if(menu == 22 && cursor > 2) cursor = 0;
     if(menu == 23 && cursor > 1) cursor = 0;
     if(menu == 24 && cursor > 2) cursor = 0;
-    if(menu == 25 && cursor > 0) cursor = 0;
+    if(menu == 25 && cursor > 3) cursor = 0;
+    if(menu == 250 && cursor > 2) cursor = 0;
+    if(menu == 251 && cursor > 2) cursor = 0;
+    if(menu == 252 && cursor > 2) cursor = 0;
+    if(menu == 26 && cursor > 1) cursor = 0;
   }
 
   if(prevBack && !nowBack){
@@ -1368,12 +1537,16 @@ void lcd_menu(){
     if(menu == 13 && cursor < 0) cursor = 1;
     if(menu == 14 && cursor < 0) cursor = 1;
     if(menu == 15 && cursor < 0) cursor = 0;
-    if(menu == 20 && cursor < 0) cursor = 5;
+    if(menu == 20 && cursor < 0) cursor = 6;
     if(menu == 21 && cursor < 0) cursor = 1;
     if(menu == 22 && cursor < 0) cursor = 2;
     if(menu == 23 && cursor < 0) cursor = 1;
     if(menu == 24 && cursor < 0) cursor = 2;
-    if(menu == 25 && cursor < 0) cursor = 0;
+    if(menu == 25 && cursor < 0) cursor = 3;
+    if(menu == 250 && cursor < 0) cursor = 2;
+    if(menu == 251 && cursor < 0) cursor = 2;
+    if(menu == 252 && cursor < 0) cursor = 2;
+    if(menu == 26 && cursor < 0) cursor = 1;
   }
 
 
