@@ -93,7 +93,7 @@ TwoWire Wire2(I2C2_SDA, I2C2_SCL);
 #define EEPROM_ADDR 0x50  //wire2
 
 #define EE_LINE_THRESHOLD 0x0000  //EEPROMアドレス、1バイト保存
-#define EE_SPEED 0x0001 //EEPROMアドレス、1バイト保存
+#define EE_SPEED 0x0001  //EEPROMアドレス、1バイト保存
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
@@ -117,9 +117,6 @@ ADC_HandleTypeDef hadc1; //DMA
 ADC_HandleTypeDef hadc2; //Kicker
 DMA_HandleTypeDef hdma_adc1;
 TIM_HandleTypeDef htim2;
-TIM_HandleTypeDef htim6;
-
-HardwareTimer *tim6 = new HardwareTimer(TIM6);
 
 // DMA Buffer
 uint16_t adc_buf[SENSOR_CH * SAMPLE_NUM];
@@ -128,6 +125,7 @@ volatile bool adc_ready = false;
 
 // MARK: constants
 bool gameFlag = false;
+bool ImAttacker = true; // true: Attacker, false: Keeper
 uint8_t line_threshold = 155; //デフォルト(仮)
 
 int PWM_limit = 230; // yukuyukuMD MAX is 230.
@@ -140,8 +138,13 @@ double preTime = 0.0;
 double preHeading = 0.0;
 double P = 0.0, I = 0.0, D = 0.0, preP = 0.0;
 
+double KP_ball = 0.2;
+double KD_ball = 0.0;
+
+
 double headingOffset = 0.0;
 double prevTime = 0.0;
+
 // MARK: function
 void TIM2_Init(void);
 void ADC1_DMA_Init(void);
@@ -274,7 +277,7 @@ void setup() {
   line_threshold = loadLineThreshold();
   setLineThreshold(line_threshold);      // ラインセンサ側に送信
 
-  // speed setup
+  // Speed setup
   basespeed = loadSpeed();
 
   // ADC DMA Init
@@ -303,86 +306,87 @@ void loop() {
     processADC();
   }
   if(gameFlag == true){
-    SerialPC.println("[Debug] Game loop");
-    static int16_t lastLineAngle = -1;
-    static unsigned long lastLineTime = 0;
-    static int lineAngle = -1;
-    static unsigned long lastHeadingTime = 0;
-    static int targetHeading = 0;
-    double speed = basespeed;
+    if (ImAttacker == true) {
+      // Attacker algorithm
+      SerialPC.println("[Debug] Game loop");
+      static int16_t lastLineAngle = -1;
+      static unsigned long lastLineTime = 0;
+      static int lineAngle = -1;
+      static unsigned long lastHeadingTime = 0;
+      static int targetHeading = 0;
+      double speed = basespeed;
 
-    Ball b = getBall();
-    double targetAngle = b.Angle;
+      Ball b = getBall();
+      double targetAngle = b.Angle;
 
-    static double prevBallErr = 0;
-    double ballErr = b.Angle;
-    double dBallErr = ballErr - prevBallErr;
-    prevBallErr = ballErr;
+      static double prevBallErr = 0;
+      double ballErr = b.Angle;
+      double dBallErr = ballErr - prevBallErr;
+      prevBallErr = ballErr;
+      double pd = KP_ball * ballErr + KD_ball * dBallErr;
 
-    double KP_ball = 0.2;
-    double KD_ball = 0.0;
+      if (b.Distance >= 210) {
+        double rad = b.Angle * PI / 180.0;
 
-    double pd = KP_ball * ballErr + KD_ball * dBallErr;
+        targetAngle = b.Angle + 50 * sin(rad) + pd;
 
-    if (b.Distance >= 210) {
-      double rad = b.Angle * PI / 180.0;
+        speed = basespeed * (0.7 + 0.3 * abs(cos(rad)));
 
-      targetAngle = b.Angle + 50 * sin(rad) + pd;
+      } else if (b.Distance >= 150) {
+        speed = basespeed;
+      } else {
+        speed = 0;
+      }
 
-      speed = basespeed * (0.7 + 0.3 * abs(cos(rad)));
+      display.clearDisplay();
+      lcd_drawarrow(targetAngle);
+      display.display();
 
-    } else if (b.Distance >= 150) {
-      speed = basespeed;
+      lineAngle = getLineAngle();   //ライン踏んだ時の移動角
+      if(lineAngle != -1){
+        lastLineAngle = lineAngle;
+        lastLineTime = millis();
+        if(lineAngle > 45 && lineAngle < 135){
+          targetHeading = 45;
+          lastHeadingTime = millis();
+        }else if(lineAngle > 225 && lineAngle < 315){
+          targetHeading = -45;
+          lastHeadingTime = millis();
+        }
+      }
+
+      if(lastLineAngle != -1 && (millis() - lastLineTime) < 50){  // 50msは後退する
+        targetAngle = wrapAngle180((double)lastLineAngle);
+      }
+      if(targetHeading != 0 && (millis() - lastHeadingTime) > 500){ // ライン踏んでから0.5秒後には目標角度をリセット
+        targetHeading = 0;
+      }
+
+      double heading;
+      double gyroZ;
+
+      getIMU(&heading, &gyroZ);
+
+      move_motor(speed, targetAngle, heading, gyroZ, targetHeading);
+
+      SerialPC.println(gyroZ);
+
+      kick();
+
+      if (!digitalRead(Pause)) {
+        gameFlag = false;
+        setMotor(0, FL_FWD, FL_REV);
+        setMotor(0, BL_FWD, BL_REV);
+        setMotor(0, BR_FWD, BR_REV);
+        setMotor(0, FR_FWD, FR_REV);
+        for (int i = 0; i < 8; i++) {
+          digitalWrite(LED[i], LOW);
+        }
+      }
+      delay(1);
     } else {
-      speed = 0;
+      // Keeper algorithm
     }
-
-    display.clearDisplay();
-    lcd_drawarrow(targetAngle);
-    display.display();
-
-    lineAngle = getLineAngle();   //ライン踏んだ時の移動角
-    if(lineAngle != -1){
-      lastLineAngle = lineAngle;
-      lastLineTime = millis();
-      if(lineAngle > 45 && lineAngle < 135){
-        targetHeading = 45;
-        lastHeadingTime = millis();
-      }else if(lineAngle > 225 && lineAngle < 315){
-        targetHeading = -45;
-        lastHeadingTime = millis();
-      }
-    }
-
-    if(lastLineAngle != -1 && (millis() - lastLineTime) < 50){  // 50msは後退する
-      targetAngle = wrapAngle180((double)lastLineAngle);
-    }
-    if(targetHeading != 0 && (millis() - lastHeadingTime) > 1000){ // ライン踏んでから1秒後には目標角度をリセット
-      targetHeading = 0;
-    }
-
-    double heading;
-    double gyroZ;
-
-    getIMU(&heading, &gyroZ);
-
-    move_motor(speed, targetAngle, heading, gyroZ, targetHeading);
-
-    SerialPC.println(gyroZ);
-
-    kick();
-
-    if (!digitalRead(Pause)) {
-      gameFlag = false;
-      setMotor(0, FL_FWD, FL_REV);
-      setMotor(0, BL_FWD, BL_REV);
-      setMotor(0, BR_FWD, BR_REV);
-      setMotor(0, FR_FWD, FR_REV);
-      for (int i = 0; i < 8; i++) {
-        digitalWrite(LED[i], LOW);
-      }
-    }
-    delay(1);
   }else{
     lcd_menu();
     delay(5);
@@ -901,7 +905,8 @@ void lcd_drawarrow(double angle) {
 void lcd_drawLineSensors(bool lineSensor[19]) {
   const int cx = 64;
   const int cy = 32;
-  const int r_ring = 25;  // 内側円の半径
+  const int r_ring = 20;  // 内側円の半径
+  const int r_outer = 30; // 外側センサ用半径
 
   // エンジェルリング（1〜16）
   for (int i = 0; i < 16; i++) {
@@ -909,10 +914,32 @@ void lcd_drawLineSensors(bool lineSensor[19]) {
       int x = cx + r_ring * cos(angle);
       int y = cy + r_ring * sin(angle);
       if (lineSensor[i]) {
-          display.fillCircle(x, y, 3, SSD1306_WHITE); // 反応ありは塗りつぶし
+          display.fillCircle(x, y, 2, SSD1306_WHITE); // 反応ありは塗りつぶし
       } else {
-          display.drawCircle(x, y, 3, SSD1306_WHITE); // 反応なしは輪郭だけ
+          display.drawCircle(x, y, 2, SSD1306_WHITE); // 反応なしは輪郭だけ
       }
+  }
+
+  // 外側センサ（17〜19）
+  // 左（17）
+  if (lineSensor[16]) {
+      display.fillRect(cx - r_outer -1, cy - 6, 3, 10, SSD1306_WHITE);
+  } else {
+      display.drawRect(cx - r_outer -1, cy - 6, 3, 10, SSD1306_WHITE);
+  }
+
+  // 後（18）
+  if (lineSensor[17]) {
+    display.fillRect(cx -4 , cy + r_outer - 3, 8, 3, SSD1306_WHITE);
+  } else {
+    display.drawRect(cx - 4, cy + r_outer - 3, 8, 3, SSD1306_WHITE);
+  }
+
+  // 右（19）
+  if (lineSensor[18]) {
+    display.fillRect(cx + r_outer -1, cy - 6, 3, 10, SSD1306_WHITE);
+  } else {
+    display.drawRect(cx + r_outer -1, cy - 6, 3, 10, SSD1306_WHITE);
   }
 }
 
