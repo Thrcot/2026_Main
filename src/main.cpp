@@ -134,15 +134,15 @@ uint8_t line_threshold = 155; //デフォルト(仮)
 int PWM_limit = 230; // yukuyukuMD MAX is 230.
 
 int basespeed = 80; //0~255
-double Kp = 0.44;
+double Kp = 0.5;
 double Ki = 0.0;
-double Kd = 0.03;
+double Kd = 0.05;
 double preTime = 0.0;
 double preHeading = 0.0;
 double P = 0.0, I = 0.0, D = 0.0, preP = 0.0;
 
 double KP_ball = 0.2;
-double KD_ball = 0.0;
+double KD_ball = 0.03;
 
 
 double headingOffset = 0.0;
@@ -331,16 +331,27 @@ void loop() {
       double ballErr = b.Angle;
       double dBallErr = ballErr - prevBallErr;
       prevBallErr = ballErr;
-      double pd = KP_ball * ballErr + KD_ball * dBallErr;
 
-      if (b.Distance >= 210) {
+      if (b.Distance >= 130) {
+        double KP_ball = 0.2;
+        double KD_ball = 0.03;
+        double k = 50;
+
+        if (b.Distance >= 180) {
+          KP_ball = 0.1;
+          KD_ball = 0.01;
+          k = 90;
+        }
+
         double rad = b.Angle * PI / 180.0;
+        double frontGain = abs(sin(rad));
+        double pd = (KP_ball * ballErr + KD_ball * dBallErr) * frontGain;
 
-        targetAngle = b.Angle + 50 * sin(rad) + pd;
+        targetAngle = b.Angle + k * sin(rad);
 
         speed = basespeed * (0.7 + 0.3 * abs(cos(rad)));
 
-      } else if (b.Distance >= 150) {
+      } else if (b.Distance >= 10) {
         speed = basespeed;
       } else {
         speed = 0;
@@ -355,20 +366,30 @@ void loop() {
         lastLineAngle = lineAngle;
         lastLineTime = millis();
         if(lineAngle > 45 && lineAngle < 135){
-          targetHeading = 45;
+          //targetHeading = 45;
           lastHeadingTime = millis();
         }else if(lineAngle > 225 && lineAngle < 315){
-          targetHeading = -45;
+          //targetHeading = -45;
           lastHeadingTime = millis();
         }
       }
 
-      if(lastLineAngle != -1 && (millis() - lastLineTime) < 50){  // 50msは後退する
+      int backtime = 50;
+
+      if (speed >= 150) {
+        backtime = 200;
+      } else if (speed >= 130) {
+        backtime = 70;
+      }
+
+      if(lastLineAngle != -1 && (millis() - lastLineTime) < backtime){  // backtime msは後退する
         targetAngle = wrapAngle180((double)lastLineAngle);
       }
+      /*
       if(targetHeading != 0 && (millis() - lastHeadingTime) > 500){ // ライン踏んでから0.5秒後には目標角度をリセット
         targetHeading = 0;
       }
+      */
 
       double heading;
       double gyroZ;
@@ -869,41 +890,27 @@ void move_motor(int speed, double target_angle, double heading, double gyroZ, do
 
   double PID = Kp * P + Kd * D;
 
-  //double gyroLPF = 0;
-
-  //gyroLPF = gyroLPF * 0.8 + gyroZ * 0.2;
-  //double PID = Kp * P - Kd * gyroLPF;
-
   double omega = PID;
   if(fabs(wrapAngle180(tarHeading - heading)) < 5.0) {
     omega = 0; // 目標角度との誤差が5度未満なら回転しない
   }
 
-  /*
-  SerialPC.print(">P:");
-  SerialPC.println(P);
-  SerialPC.print(">D:");
-  SerialPC.println(D);
-  SerialPC.print(">PID:");
-  SerialPC.println(PID);
-  */
+  double tx_fr = -cos(radians(target_angle + 45.0));
+  double tx_br = -cos(radians(target_angle - 45.0));
+  double tx_bl =  cos(radians(target_angle + 45.0));
+  double tx_fl =  cos(radians(target_angle - 45.0));
 
-  int m_fr = (int)(speed * -cos(radians(target_angle + 45.0)));
-  int m_br = (int)(speed * -cos(radians(target_angle - 45.0)));
-  int m_bl = (int)(speed * cos(radians(target_angle + 45.0)));
-  int m_fl = (int)(speed * cos(radians(target_angle - 45.0)));
+  double m_fr = speed * tx_fr;
+  double m_br = speed * tx_br;
+  double m_bl = speed * tx_bl;
+  double m_fl = speed * tx_fl;
 
-  int v_fr = m_fr + (int)omega;
-  int v_br = m_br + (int)omega;
-  int v_bl = m_bl + (int)omega;
-  int v_fl = m_fl + (int)omega;
+  omega = PID * (speed / 255.0);
 
-  /*
-  int v_fr = (int)omega;
-  int v_br = (int)omega;
-  int v_bl = (int)omega;
-  int v_fl = (int)omega;
-  */
+  int v_fr = (int)m_fr + (int)omega;
+  int v_br = (int)m_br + (int)omega;
+  int v_bl = (int)m_bl + (int)omega;
+  int v_fl = (int)m_fl + (int)omega;
 
   v_fr = constrain(v_fr, -255, 255);
   v_br = constrain(v_br, -255, 255);
@@ -1192,7 +1199,7 @@ void lcd_menu(){
     display.println("Back");
   }
   if(menu == 14){
-    display.setCursor(0, cursor * 8);
+    display.setCursor(0, 8 + cursor * 8);
     display.print(">");
 
     display.setCursor(10,0);
