@@ -393,7 +393,59 @@ void loop() {
       }
       delay(1);
     } else {
-      // Keeper algorithm
+      // Keeper algorithm(仮)
+      SerialPC.println("[Debug] Game loop");
+      static int16_t lastLineAngle = -1;
+      static unsigned long lastLineTime = 0;
+      static int lineAngle = -1;
+      double speed = basespeed;
+      double targetHeading = 0;
+      double targetAngle = 0;
+
+      Ball b = getBall();
+      speed = basespeed * fabs(sin(b.Angle * PI / 180.0));
+      if(b.Angle > 0 && b.Angle < 180){
+        targetAngle = 90;
+      }else{
+        targetAngle  = -90;
+      }
+
+      display.clearDisplay();
+      lcd_drawarrow(targetAngle);
+      display.display();
+
+      lineAngle = getLineAngle();   //ライン踏んだ時の移動角
+      if(lineAngle != -1){
+        lastLineAngle = lineAngle;
+        lastLineTime = millis();
+      }
+
+      if(lastLineAngle != -1 && (millis() - lastLineTime) < 50){  // 50msは後退する
+        targetAngle = wrapAngle180((double)lastLineAngle);
+      }
+
+      double heading;
+      double gyroZ;
+
+      getIMU(&heading, &gyroZ);
+
+      move_motor(speed, targetAngle, heading, gyroZ, targetHeading);
+
+      SerialPC.println(gyroZ);
+
+      kick();
+
+      if (!digitalRead(Pause)) {
+        gameFlag = false;
+        setMotor(0, FL_FWD, FL_REV);
+        setMotor(0, BL_FWD, BL_REV);
+        setMotor(0, BR_FWD, BR_REV);
+        setMotor(0, FR_FWD, FR_REV);
+        for (int i = 0; i < 8; i++) {
+          digitalWrite(LED[i], LOW);
+        }
+      }
+      delay(1);
     }
   }else{
     lcd_menu();
@@ -800,8 +852,9 @@ void setMotor(int pwm, int MDpin1, int MDpin2) {
 void move_motor(int speed, double target_angle, double heading, double gyroZ, double tarHeading) {
   unsigned long currentTime = micros();
   double dt = (currentTime - preTime) / 1000000.0;
-  if (dt < 0.001) return;
   preTime = currentTime;
+
+  if (dt < 0.001) return;
 
   P = wrapAngle180(tarHeading - heading);
 
@@ -822,9 +875,9 @@ void move_motor(int speed, double target_angle, double heading, double gyroZ, do
   //double PID = Kp * P - Kd * gyroLPF;
 
   double omega = PID;
-
-  if (abs(omega) < 4.0) omega = 0;
-  if (abs(P) < 2.0 && abs(gyroZ) < 2.0) omega = 0;
+  if(fabs(wrapAngle180(tarHeading - heading)) < 5.0) {
+    omega = 0; // 目標角度との誤差が5度未満なら回転しない
+  }
 
   /*
   SerialPC.print(">P:");
@@ -864,7 +917,7 @@ void move_motor(int speed, double target_angle, double heading, double gyroZ, do
 }
 
 void motor_test(){
-  for(int i = 0; i < 8; i++){
+  for(int i = 0; i < 2; i++){
   for (int pwm = 0; pwm <= 255; pwm++) {
     setMotor(pwm, FL_FWD, FL_REV);
     setMotor(pwm, FR_FWD, FR_REV);
@@ -878,7 +931,7 @@ void motor_test(){
     setMotor(pwm, FR_FWD, FR_REV);
     setMotor(pwm, BL_FWD, BL_REV);
     setMotor(pwm, BR_FWD, BR_REV);
-    delay(1);
+    delay(10);
   }
   delay(10);
   for (int pwm = 0; pwm >= -255; pwm--) {
@@ -886,7 +939,7 @@ void motor_test(){
     setMotor(pwm, FR_FWD, FR_REV);
     setMotor(pwm, BL_FWD, BL_REV);
     setMotor(pwm, BR_FWD, BR_REV);
-    delay(1);
+    delay(10);
   }
   delay(10);
   for (int pwm = -255; pwm <= 0; pwm++) {
@@ -894,7 +947,7 @@ void motor_test(){
     setMotor(pwm, FR_FWD, FR_REV);
     setMotor(pwm, BL_FWD, BL_REV);
     setMotor(pwm, BR_FWD, BR_REV);
-    delay(1);
+    delay(10);
   }
   delay(10);
   setMotor(0, FL_FWD, FL_REV);
@@ -1448,11 +1501,11 @@ void lcd_menu(){
     }
     else if(menu == 250){
       if(cursor == 0){
-        Kp = Kp + 0.001;
+        Kp = Kp + 0.005;
         if(Kp > 1) Kp = 1;
         savePIDgain(Kp, Ki, Kd);
       }else if(cursor == 1){
-        Kp = Kp - 0.001;
+        Kp = Kp - 0.005;
         if(Kp < 0) Kp = 0;
         savePIDgain(Kp, Ki, Kd);
       }else if(cursor == 2){
@@ -1462,11 +1515,11 @@ void lcd_menu(){
     }
     else if(menu == 251){
       if(cursor == 0){
-        Ki = Ki + 0.001;
+        Ki = Ki + 0.005;
         if(Ki > 1) Ki = 1;
         savePIDgain(Kp, Ki, Kd);
       }else if(cursor == 1){
-        Ki = Ki - 0.001;
+        Ki = Ki - 0.005;
         if(Ki < 0) Ki = 0;
         savePIDgain(Kp, Ki, Kd);
       }else if(cursor == 2){
@@ -1476,11 +1529,11 @@ void lcd_menu(){
     }
     else if(menu == 252){
       if(cursor == 0){
-        Kd = Kd + 0.001;
+        Kd = Kd + 0.005;
         if(Kd > 1) Kd = 1;
         savePIDgain(Kp, Ki, Kd);
       }else if(cursor == 1){
-        Kd = Kd - 0.001;
+        Kd = Kd - 0.005;
         if(Kd < 0) Kd = 0;
         savePIDgain(Kp, Ki, Kd);
       }else if(cursor == 2){
