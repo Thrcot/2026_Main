@@ -1176,7 +1176,7 @@ void lcd_menu(){
     display.print("Angle:");
     display.print(ball.Angle);
     display.setCursor(0,8);
-    display.print(" Distance:");
+    display.print("Distance:");
     display.println(ball.Distance);
     display.setCursor(10,16);
     display.println(">Back");
@@ -1196,8 +1196,18 @@ void lcd_menu(){
     display.print(">");
 
     display.setCursor(10,0);
-    display.println("Run");
+    display.print("Catch: ");
+    uint16_t catchval = readCatch();
+    display.print(catchval);
+    if (catchval < 200) { //ボール保持判定
+      display.print(": 1");
+    } else {
+      display.print(": 0");
+    }
+
     display.setCursor(10,8);
+    display.println("Run");
+    display.setCursor(10,16);
     display.println("Back");
   }
   if(menu == 15){
@@ -1376,6 +1386,17 @@ void lcd_menu(){
     }
     else if(menu == 13){
       if(cursor == 0){
+
+        display.setCursor(10,0);
+        display.print("Catch: ");
+        uint16_t catchval = readCatch();
+        display.print(catchval);
+        if (catchval < 200) { //ボール保持判定
+          display.print(": 1");
+        } else {
+          display.print(": 0");
+        }
+
         display.setCursor(10,0);
         display.println("Running...");
         display.setCursor(10,8);
@@ -1394,9 +1415,9 @@ void lcd_menu(){
     }
     else if(menu == 14){
       if(cursor == 0){
-        display.setCursor(10,0);
-        display.println("Running...");
         display.setCursor(10,8);
+        display.println("Running...");
+        display.setCursor(10,16);
         display.println("Back");
         display.display();
         digitalWrite(Kick, HIGH);
