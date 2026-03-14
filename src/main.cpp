@@ -144,7 +144,6 @@ double P = 0.0, I = 0.0, D = 0.0, preP = 0.0;
 double KP_ball = 0.2;
 double KD_ball = 0.03;
 
-
 double headingOffset = 0.0;
 double prevTime = 0.0;
 
@@ -376,8 +375,10 @@ void loop() {
 
       int backtime = 50;
 
-      if (speed >= 150) {
+      if (speed >= 200) {
         backtime = 200;
+      } else if (speed >= 150) {
+        backtime = 100;
       } else if (speed >= 130) {
         backtime = 70;
       }
@@ -871,6 +872,7 @@ void setMotor(int pwm, int MDpin1, int MDpin2) {
 }
 
 void move_motor(int speed, double target_angle, double heading, double gyroZ, double tarHeading) {
+
   unsigned long currentTime = micros();
   double dt = (currentTime - preTime) / 1000000.0;
   preTime = currentTime;
@@ -886,15 +888,12 @@ void move_motor(int speed, double target_angle, double heading, double gyroZ, do
   double rawpassD = -dHeading / dt;
   D = 0.9 * D + 0.1 * rawpassD;
   preHeading = heading;
-  preP = P;
 
   double PID = Kp * P + Kd * D;
 
-  double omega = PID;
-  if(fabs(wrapAngle180(tarHeading - heading)) < 5.0) {
-    omega = 0; // 目標角度との誤差が5度未満なら回転しない
-  }
+  if (fabs(P) < 5.0) PID = 0;
 
+  // ---- 並進ベクトル ----
   double tx_fr = -cos(radians(target_angle + 45.0));
   double tx_br = -cos(radians(target_angle - 45.0));
   double tx_bl =  cos(radians(target_angle + 45.0));
@@ -905,12 +904,32 @@ void move_motor(int speed, double target_angle, double heading, double gyroZ, do
   double m_bl = speed * tx_bl;
   double m_fl = speed * tx_fl;
 
-  omega = PID * (speed / 255.0);
+  // ---- 回転成分 ----
+  double omega = PID * (speed / 255.0);
 
-  int v_fr = (int)m_fr + (int)omega;
-  int v_br = (int)m_br + (int)omega;
-  int v_bl = (int)m_bl + (int)omega;
-  int v_fl = (int)m_fl + (int)omega;
+  // ===== 比率リミット =====
+  double trans = speed;
+  double rot = fabs(omega);
+
+  double sum = trans + rot;
+
+  if (sum > 255.0) {
+    double trans_scale = (255.0 * 0.7) / trans; // 並進70%
+    double rot_scale   = (255.0 * 0.3) / rot;   // 回転30%
+
+    m_fr *= trans_scale;
+    m_br *= trans_scale;
+    m_bl *= trans_scale;
+    m_fl *= trans_scale;
+
+    omega *= rot_scale;
+  }
+
+  // ---- 合成 ----
+  int v_fr = (int)(m_fr + omega);
+  int v_br = (int)(m_br + omega);
+  int v_bl = (int)(m_bl + omega);
+  int v_fl = (int)(m_fl + omega);
 
   v_fr = constrain(v_fr, -255, 255);
   v_br = constrain(v_br, -255, 255);
