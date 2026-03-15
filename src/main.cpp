@@ -371,6 +371,8 @@ void loop() {
           //targetHeading = -45;
           lastHeadingTime = millis();
         }
+      } else {
+        speed += 30;
       }
 
       int backtime = 50;
@@ -378,9 +380,11 @@ void loop() {
       if (speed >= 200) {
         backtime = 200;
       } else if (speed >= 150) {
-        backtime = 100;
+        backtime = 180;
       } else if (speed >= 130) {
-        backtime = 70;
+        backtime = 150;
+      }else if (speed >= 100) {
+        backtime = 100;
       }
 
       if(lastLineAngle != -1 && (millis() - lastLineTime) < backtime){  // backtime msは後退する
@@ -891,7 +895,7 @@ void move_motor(int speed, double target_angle, double heading, double gyroZ, do
 
   double PID = Kp * P + Kd * D;
 
-  if (fabs(P) < 5.0) PID = 0;
+  if (fabs(P) < 2.5) PID = 0;
 
   // ---- 並進ベクトル ----
   double tx_fr = -cos(radians(target_angle + 45.0));
@@ -914,8 +918,8 @@ void move_motor(int speed, double target_angle, double heading, double gyroZ, do
   double sum = trans + rot;
 
   if (sum > 255.0) {
-    double trans_scale = (255.0 * 0.7) / trans; // 並進70%
-    double rot_scale   = (255.0 * 0.3) / rot;   // 回転30%
+    double trans_scale = (255.0 * 0.6) / trans; // 並進60%
+    double rot_scale   = (255.0 * 0.4) / rot;   // 回転40%
 
     m_fr *= trans_scale;
     m_br *= trans_scale;
