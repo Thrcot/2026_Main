@@ -131,7 +131,7 @@ bool gameFlag = false;
 bool ImAttacker = true; // true: Attacker, false: Keeper
 uint8_t line_threshold = 155; //デフォルト(仮)
 
-int PWM_limit = 230; // yukuyukuMD MAX is 230.
+int PWM_limit = 250; // yukuyukuMD MAX is 250.
 
 int basespeed = 80; //0~255
 double Kp = 0.5;
@@ -146,6 +146,20 @@ double KD_ball = 0.03;
 
 double headingOffset = 0.0;
 double prevTime = 0.0;
+
+// Reset ID
+enum ResetCause {
+  CAUSE_UNKNOWN = 0,
+  CAUSE_LOW_POWER = 1,
+  CAUSE_WWDG = 2,
+  CAUSE_IWDG = 3,
+  CAUSE_SOFTWARE = 4,
+  CAUSE_POWER_ON = 5,
+  CAUSE_EXTERNAL = 6,
+  CAUSE_BROWNOUT = 7
+};
+
+int resetCause = 0;
 
 // MARK: function
 void TIM2_Init(void);
@@ -179,6 +193,7 @@ void saveSpeed(uint8_t speed);
 uint8_t loadSpeed();
 void savePIDgain(double Kp, double Ki, double Kd);
 void loadPIDgain(double *Kp, double *Ki, double *Kd);
+int getResetCause();
 
 // HAL Callback
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
@@ -301,6 +316,10 @@ void setup() {
   delay(1000);
   display.clearDisplay();
   display.display();
+
+  SerialPC.println("[Debug] Getting reset cause");
+  resetCause = getResetCause();
+  SerialPC.println("[Debug] Done");
 
   SerialPC.println("[Debug] Setup end");
 }
@@ -1189,6 +1208,9 @@ void lcd_menu(){
     display.println("BNO055_test");
     display.setCursor(10,40);
     display.println("Back");
+    display.setCursor(10,48);
+    display.print("Reset Cause: ");
+    display.println(resetCause);
   }
   if(menu == 11){
     display.setCursor(0,0);
@@ -1666,4 +1688,30 @@ void lcd_menu(){
   prevOpt   = nowOpt;
 
   display.display();
+}
+
+int getResetCause() {
+  int cause = CAUSE_UNKNOWN;
+
+  // フラグのチェック（優先度の高い異常系から順に）
+  if (__HAL_RCC_GET_FLAG(RCC_FLAG_LPWRRST)) {
+    cause = CAUSE_LOW_POWER;
+  } else if (__HAL_RCC_GET_FLAG(RCC_FLAG_WWDGRST)) {
+    cause = CAUSE_WWDG;
+  } else if (__HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST)) {
+    cause = CAUSE_IWDG;
+  } else if (__HAL_RCC_GET_FLAG(RCC_FLAG_SFTRST)) {
+    cause = CAUSE_SOFTWARE;
+  } else if (__HAL_RCC_GET_FLAG(RCC_FLAG_PORRST)) {
+    cause = CAUSE_POWER_ON;
+  } else if (__HAL_RCC_GET_FLAG(RCC_FLAG_PINRST)) {
+    cause = CAUSE_EXTERNAL;
+  } else if (__HAL_RCC_GET_FLAG(RCC_FLAG_BORRST)) {
+    cause = CAUSE_BROWNOUT;
+  }
+
+  // 次回判定のためにフラグをクリア
+  __HAL_RCC_CLEAR_RESET_FLAGS();
+
+  return cause;
 }
