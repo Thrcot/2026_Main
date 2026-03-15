@@ -110,6 +110,7 @@ Adafruit_BNO055 bno = Adafruit_BNO055(55, BNO055_ADDR, &Wire2);
 #define LINE_SENSOR_HEADER 0xAD
 #define LINE_CARIBRATION_ERROR 0xAE
 #define LINE_ANGLE_INFO 0xAF
+#define LINE_RESET 0xB0
 
 // DMA Setting
 #define SENSOR_CH 8
@@ -185,6 +186,7 @@ void lcd_drawLineSensors(bool lineSensor[19]);
 void lcd_menu();
 bool getLineSensorValues(bool lineSensor[19]);
 void lineCalibration();
+void resetLineSensor();
 void resetHeadingZero();
 void setLineThreshold(uint8_t threshold);
 void saveLineThreshold(uint8_t threshold);
@@ -358,7 +360,7 @@ void loop() {
         if (b.Distance >= 180) {
           KP_ball = 0.1;
           KD_ball = 0.01;
-          k = 90;
+          k = 100;
         }
 
         double rad = b.Angle * PI / 180.0;
@@ -403,7 +405,7 @@ void loop() {
       } else if (speed >= 130) {
         backtime = 150;
       }else if (speed >= 100) {
-        backtime = 100;
+        backtime = 120;
       }
 
       if(lastLineAngle != -1 && (millis() - lastLineTime) < backtime){  // backtime msは後退する
@@ -482,6 +484,7 @@ void loop() {
 
       if (!digitalRead(Pause)) {
         gameFlag = false;
+        resetLineSensor();
         setMotor(0, FL_FWD, FL_REV);
         setMotor(0, BL_FWD, BL_REV);
         setMotor(0, BR_FWD, BR_REV);
@@ -880,6 +883,10 @@ int16_t getLineAngle() {
   return value;
 }
 
+void resetLineSensor() {
+  SerialLine.write(LINE_RESET);
+}
+
 void setMotor(int pwm, int MDpin1, int MDpin2) {
   pwm = constrain(pwm,-PWM_limit,PWM_limit);
   if (pwm > 0) {
@@ -937,8 +944,8 @@ void move_motor(int speed, double target_angle, double heading, double gyroZ, do
   double sum = trans + rot;
 
   if (sum > 255.0) {
-    double trans_scale = (255.0 * 0.6) / trans; // 並進60%
-    double rot_scale   = (255.0 * 0.4) / rot;   // 回転40%
+    double trans_scale = (255.0 * 0.55) / trans;
+    double rot_scale   = (255.0 * 0.45) / rot;
 
     m_fr *= trans_scale;
     m_br *= trans_scale;
@@ -1391,6 +1398,7 @@ void lcd_menu(){
   if(prevEnter && !nowEnter){
     if(menu == 0){
       if(cursor == 0){
+        resetLineSensor();
         gameFlag = true;
       }
       else if(cursor == 1){
