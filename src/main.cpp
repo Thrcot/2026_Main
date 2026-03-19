@@ -1214,10 +1214,10 @@ void lcd_menu(){
     display.setCursor(10,32);
     display.println("BNO055_test");
     display.setCursor(10,40);
-    display.println("Back");
-    display.setCursor(10,48);
     display.print("Reset Cause: ");
     display.println(resetCause);
+    display.setCursor(10,48);
+    display.println("Back");
   }
   if(menu == 11){
     display.setCursor(0,0);
@@ -1237,7 +1237,7 @@ void lcd_menu(){
     display.setCursor(0,8);
     display.print("Distance:");
     display.println(ball.Distance);
-    display.setCursor(10,16);
+    display.setCursor(0,16);
     display.println(">Back");
     display.display();
   }
@@ -1273,6 +1273,38 @@ void lcd_menu(){
     display.setCursor(10,0);
     display.println(getHeading());
     display.setCursor(10,8);
+    display.println(">Back");
+  }
+  if(menu == 16){
+    display.setCursor(0, 0);
+    display.print("Cause: ");
+    switch(resetCause){
+      case 0:
+        display.println("Unknown");
+        break;
+      case 1:
+        display.println("Low Power");
+        break;
+      case 2:
+        display.println("WWDG");
+        break;
+      case 3:
+        display.println("IWDG");
+        break;
+      case 4:
+        display.println("Software");
+        break;
+      case 5:
+        display.println("Power On");
+        break;
+      case 6:
+        display.println("External");
+        break;
+      case 7:
+        display.println("Brownout");
+        break;
+    }
+    display.setCursor(0,8);
     display.println(">Back");
   }
   if(menu == 20){
@@ -1432,6 +1464,10 @@ void lcd_menu(){
         cursor = 0;
       }
       else if(cursor == 5){
+        menu = 16;
+        cursor = 0;
+      }
+      else if(cursor == 6){
         menu = 0;
         cursor = 0;
       }
@@ -1490,6 +1526,10 @@ void lcd_menu(){
       }
     }
     else if(menu == 15){
+      menu = 10;
+      cursor = 0;
+    }
+    else if(menu == 16){
       menu = 10;
       cursor = 0;
     }
@@ -1644,12 +1684,13 @@ void lcd_menu(){
   if(prevNext && !nowNext){
     cursor++;
     if(menu == 0 && cursor > 2) cursor = 0;
-    if(menu == 10 && cursor > 5) cursor = 0;
+    if(menu == 10 && cursor > 6) cursor = 0;
     if(menu == 11 && cursor > 0) cursor = 0;
     if(menu == 12 && cursor > 0) cursor = 0;
     if(menu == 13 && cursor > 1) cursor = 0;
     if(menu == 14 && cursor > 1) cursor = 0;
     if(menu == 15 && cursor > 0) cursor = 0;
+    if(menu == 16 && cursor > 0) cursor = 0;
     if(menu == 20 && cursor > 6) cursor = 0;
     if(menu == 21 && cursor > 1) cursor = 0;
     if(menu == 22 && cursor > 2) cursor = 0;
@@ -1665,12 +1706,13 @@ void lcd_menu(){
   if(prevBack && !nowBack){
     cursor--;
     if(menu == 0 && cursor < 0) cursor = 2;
-    if(menu == 10 && cursor < 0) cursor = 5;
+    if(menu == 10 && cursor < 0) cursor = 6;
     if(menu == 11 && cursor < 0) cursor = 0;
     if(menu == 12 && cursor < 0) cursor = 0;
     if(menu == 13 && cursor < 0) cursor = 1;
     if(menu == 14 && cursor < 0) cursor = 1;
     if(menu == 15 && cursor < 0) cursor = 0;
+    if(menu == 16 && cursor < 0) cursor = 0;
     if(menu == 20 && cursor < 0) cursor = 6;
     if(menu == 21 && cursor < 0) cursor = 1;
     if(menu == 22 && cursor < 0) cursor = 2;
