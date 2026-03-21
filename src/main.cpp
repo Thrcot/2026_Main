@@ -46,14 +46,6 @@
 #define A7 PC5
 #define A8 PB1
 
-struct Ball {
-  double Angle;
-  double Distance;
-};
-
-const int BALL[8] = {A1, A2, A3, A4, A5, A6, A7, A8};
-double BALLANGLE[8] = {0, 45, 90, 135, 180, 225, 270, 315};
-
 #define LED1 PC14
 #define LED2 PA0
 #define LED3 PC15
@@ -114,7 +106,7 @@ Adafruit_BNO055 bno = Adafruit_BNO055(55, BNO055_ADDR, &Wire2);
 
 // DMA Setting
 #define SENSOR_CH 8
-#define SAMPLE_NUM 32
+#define SAMPLE_NUM 128
 
 // HALハンドラ
 ADC_HandleTypeDef hadc1; //DMA
@@ -122,19 +114,43 @@ ADC_HandleTypeDef hadc2; //Kicker
 DMA_HandleTypeDef hdma_adc1;
 TIM_HandleTypeDef htim2;
 
+// MARK: constants
 // DMA Buffer
 uint16_t adc_buf[SENSOR_CH * SAMPLE_NUM];
 volatile uint16_t sensor_avg[SENSOR_CH];
 volatile bool adc_ready = false;
 
-// MARK: constants
+struct Ball {
+  double Angle;
+  double Distance;
+  double X;
+  double Y;
+};
+
+const int BALL[8] = {A1, A2, A3, A4, A5, A6, A7, A8};
+double BALLANGLE[8] = {0, 45, 90, 135, 180, 225, 270, 315};
+
+#define RING_LINE 16
+
+constexpr int16_t kAccelOffsetX = -1;
+constexpr int16_t kAccelOffsetY = -14;
+constexpr int16_t kAccelOffsetZ = -15;
+constexpr int16_t kMagOffsetX = 160;
+constexpr int16_t kMagOffsetY = 203;
+constexpr int16_t kMagOffsetZ = -13;
+constexpr int16_t kGyroOffsetX = -1;
+constexpr int16_t kGyroOffsetY = -2;
+constexpr int16_t kGyroOffsetZ = -2;
+constexpr int16_t kAccelRadius = 1000;
+constexpr int16_t kMagRadius = 1267;
+
 bool gameFlag = false;
 bool ImAttacker = true; // true: Attacker, false: Keeper
-uint8_t line_threshold = 155; //デフォルト(仮)
+uint8_t line_threshold = 155;
 
 int PWM_limit = 250; // yukuyukuMD MAX is 250.
 
-int basespeed = 80; //0~255
+int basespeed = 80;
 double Kp = 0.5;
 double Ki = 0.0;
 double Kd = 0.05;
@@ -174,17 +190,15 @@ byte readEEPROM(int addr);
 Ball getBall();
 double getBallAngle();
 double getHeading();
-double getGyroZ();
-void getIMU(double *heading, double *gyroZ);
 int16_t getLineAngle();
 void motor_test();
 void setMotor(int pwm, int MDpin1, int MDpin2);
-void move_motor(int speed, double target_angle, double heading, double gyroZ, double tarHeading);
+void move_motor(int speed, double target_angle, double heading, double tarHeading);
 void kick();
 void lcd_drawarrow(double angle);
-void lcd_drawLineSensors(bool lineSensor[19]);
+void lcd_drawLineSensors(bool lineSensor[RING_LINE]);
 void lcd_menu();
-bool getLineSensorValues(bool lineSensor[19]);
+bool getLineSensorValues(bool lineSensor[RING_LINE]);
 void lineCalibration();
 void resetLineSensor();
 void resetHeadingZero();
@@ -285,11 +299,28 @@ void setup() {
   }
   delay(100);
   }
+
+  // shirokumaShiki bno
+  adafruit_bno055_offsets_t offsets;
+  offsets.accel_offset_x = kAccelOffsetX;
+  offsets.accel_offset_y = kAccelOffsetY;
+  offsets.accel_offset_z = kAccelOffsetZ;
+  offsets.gyro_offset_x = kGyroOffsetX;
+  offsets.gyro_offset_y = kGyroOffsetY;
+  offsets.gyro_offset_z = kGyroOffsetZ;
+  offsets.mag_offset_x = kMagOffsetX;
+  offsets.mag_offset_y = kMagOffsetY;
+  offsets.mag_offset_z = kMagOffsetZ;
+  offsets.accel_radius = kAccelRadius;
+  offsets.mag_radius = kMagRadius;
+  bno.setSensorOffsets(offsets);
+
+  bno.setExtCrystalUse(true);
+  //bno.setMode(OPERATION_MODE_IMUPLUS);
+
   for (int i = 0; i < 8; i++) {
     digitalWrite(LED[i], LOW);
   }
-  bno.setExtCrystalUse(true);
-  //bno.setMode(OPERATION_MODE_IMUPLUS);
   delay(500);
   resetHeadingZero();
 
@@ -342,38 +373,53 @@ void loop() {
       static int lineAngle = -1;
       static unsigned long lastHeadingTime = 0;
       static int targetHeading = 0;
+      static bool BallIsNear = false;
+      static bool ImOnCorner = false;
       double speed = basespeed;
 
       Ball b = getBall();
       double targetAngle = b.Angle;
+      double ballX = b.X;
+      double ballY = b.Y;
 
       static double prevBallErr = 0;
       double ballErr = b.Angle;
       double dBallErr = ballErr - prevBallErr;
       prevBallErr = ballErr;
 
-      if (b.Distance >= 130) {
-        double KP_ball = 0.2;
-        double KD_ball = 0.03;
-        double k = 50;
+      double NearThr = 150;
+      if (BallIsNear) {
+        NearThr = 120;
+      } else {
+        ;
+      }
 
+      if (b.Distance >= NearThr) {
+        BallIsNear = true;
+        double KP_ball = 0.2;
+        double KD_ball = 0.0;
+        double k = 80;
+
+        /*
         if (b.Distance >= 180) {
           KP_ball = 0.1;
           KD_ball = 0.01;
           k = 100;
         }
+          */
 
         double rad = b.Angle * PI / 180.0;
         double frontGain = abs(sin(rad));
-        double pd = (KP_ball * ballErr + KD_ball * dBallErr) * frontGain;
+        double pd = KP_ball * ballErr + KD_ball * dBallErr;
 
-        targetAngle = b.Angle + k * sin(rad);
+        targetAngle = b.Angle + k * sin(rad) + pd;
 
         speed = basespeed * (0.7 + 0.3 * abs(cos(rad)));
-
       } else if (b.Distance >= 10) {
-        speed = basespeed;
+        BallIsNear = false;
+        speed = basespeed + 50;
       } else {
+        BallIsNear = false;
         speed = 0;
       }
 
@@ -383,49 +429,39 @@ void loop() {
 
       lineAngle = getLineAngle();   //ライン踏んだ時の移動角
       if(lineAngle != -1){
+        speed += 30;
         lastLineAngle = lineAngle;
         lastLineTime = millis();
-        if(lineAngle > 45 && lineAngle < 135){
-          //targetHeading = 45;
-          lastHeadingTime = millis();
-        }else if(lineAngle > 225 && lineAngle < 315){
-          //targetHeading = -45;
-          lastHeadingTime = millis();
+        if (!ImOnCorner) {
+          if((lineAngle > 125) && (lineAngle < 145)){
+            ImOnCorner = true;
+            targetHeading = -73;
+            lastHeadingTime = millis();
+          }else if((lineAngle > 215) && (lineAngle < 235)){
+            ImOnCorner = true;
+            targetHeading = 73;
+            lastHeadingTime = millis();
+          } else {
+            ImOnCorner = false;
+          }
         }
       } else {
-        speed += 30;
+
       }
 
-      int backtime = 50;
-
-      if (speed >= 200) {
-        backtime = 200;
-      } else if (speed >= 150) {
-        backtime = 180;
-      } else if (speed >= 130) {
-        backtime = 150;
-      }else if (speed >= 100) {
-        backtime = 120;
-      }
+      int backtime = 5;
 
       if(lastLineAngle != -1 && (millis() - lastLineTime) < backtime){  // backtime msは後退する
         targetAngle = wrapAngle180((double)lastLineAngle);
       }
-      /*
-      if(targetHeading != 0 && (millis() - lastHeadingTime) > 500){ // ライン踏んでから0.5秒後には目標角度をリセット
+      if(targetHeading != 0 && (millis() - lastHeadingTime) > 800){ // ライン踏んでから0.8秒後には目標角度をリセット
         targetHeading = 0;
+        ImOnCorner = false;
       }
-      */
 
-      double heading;
-      double gyroZ;
+      double heading = getHeading();
 
-      getIMU(&heading, &gyroZ);
-
-      move_motor(speed, targetAngle, heading, gyroZ, targetHeading);
-
-      SerialPC.println(gyroZ);
-
+      move_motor(speed, targetAngle, heading, targetHeading);
       kick();
 
       if (!digitalRead(Pause)) {
@@ -471,14 +507,9 @@ void loop() {
         targetAngle = wrapAngle180((double)lastLineAngle);
       }
 
-      double heading;
-      double gyroZ;
+      double heading = getHeading();
 
-      getIMU(&heading, &gyroZ);
-
-      move_motor(speed, targetAngle, heading, gyroZ, targetHeading);
-
-      SerialPC.println(gyroZ);
+      move_motor(speed, targetAngle, heading, targetHeading);
 
       kick();
 
@@ -707,6 +738,8 @@ Ball getBall() {
   angle = wrapAngle180(angle);
 
   ballinfo.Angle = angle;
+  ballinfo.X = X;
+  ballinfo.Y = Y;
 
   // ----- 距離 -----
   distance_sum /= 100.0;
@@ -715,8 +748,7 @@ Ball getBall() {
   return ballinfo;
 }
 
-bool getLineSensorValues(bool lineSensor[19]) {
-  // 初期化
+bool getLineSensorValues(bool lineSensor[RING_LINE]) {
   for (int i = 0; i < 19; i++) lineSensor[i] = false;
 
   SerialLine.write(LINE_SENSOR_INFO); // センサに情報要求
@@ -746,7 +778,7 @@ bool getLineSensorValues(bool lineSensor[19]) {
                   buffer[0];
 
   // 19センサ分に展開
-  for (int i = 0; i < 19; i++) {
+  for (int i = 0; i < RING_LINE; i++) {
       lineSensor[i] = (bits >> i) & 0x01;
   }
 
@@ -842,23 +874,6 @@ double getHeading() {
   return wrapAngle180(heading);
 }
 
-double getGyroZ() {
-  sensors_event_t gyro;
-  bno.getEvent(&gyro, Adafruit_BNO055::VECTOR_GYROSCOPE);
-
-  return gyro.gyro.z * 57.2958;
-}
-
-void getIMU(double *heading, double *gyroZ) {
-  sensors_event_t ev, gyro;
-  bno.getEvent(&ev);
-  bno.getEvent(&gyro, Adafruit_BNO055::VECTOR_GYROSCOPE);
-
-  float raw = ev.orientation.x;
-  *heading = wrapAngle180((double)raw - headingOffset);
-  *gyroZ = gyro.gyro.z * 57.2958; // deg/s
-}
-
 void resetHeadingZero() {
   sensors_event_t ev;
   bno.getEvent(&ev);
@@ -901,7 +916,7 @@ void setMotor(int pwm, int MDpin1, int MDpin2) {
   }
 }
 
-void move_motor(int speed, double target_angle, double heading, double gyroZ, double tarHeading) {
+void move_motor(int speed, double target_angle, double heading, double tarHeading) {
 
   unsigned long currentTime = micros();
   double dt = (currentTime - preTime) / 1000000.0;
@@ -921,7 +936,7 @@ void move_motor(int speed, double target_angle, double heading, double gyroZ, do
 
   double PID = Kp * P + Kd * D;
 
-  if (fabs(P) < 2.5) PID = 0;
+  if (fabs(P) < 1.5) PID = 0;
 
   // ---- 並進ベクトル ----
   double tx_fr = -cos(radians(target_angle + 45.0));
@@ -944,8 +959,8 @@ void move_motor(int speed, double target_angle, double heading, double gyroZ, do
   double sum = trans + rot;
 
   if (sum > 255.0) {
-    double trans_scale = (255.0 * 0.55) / trans;
-    double rot_scale   = (255.0 * 0.45) / rot;
+    double trans_scale = (255.0 * 0.6) / trans;
+    double rot_scale   = (255.0 * 0.4) / rot;
 
     m_fr *= trans_scale;
     m_br *= trans_scale;
@@ -1065,13 +1080,11 @@ void lcd_drawarrow(double angle) {
   display.drawLine(x2, y2, hx2, hy2, SSD1306_WHITE);
 }
 
-void lcd_drawLineSensors(bool lineSensor[19]) {
+void lcd_drawLineSensors(bool lineSensor[RING_LINE]) {
   const int cx = 64;
   const int cy = 32;
   const int r_ring = 20;  // 内側円の半径
-  const int r_outer = 30; // 外側センサ用半径
 
-  // エンジェルリング（1〜16）
   for (int i = 0; i < 16; i++) {
       float angle = radians(270 - i * (360.0 / 16.0));
       int x = cx + r_ring * cos(angle);
@@ -1081,28 +1094,6 @@ void lcd_drawLineSensors(bool lineSensor[19]) {
       } else {
           display.drawCircle(x, y, 2, SSD1306_WHITE); // 反応なしは輪郭だけ
       }
-  }
-
-  // 外側センサ（17〜19）
-  // 左（17）
-  if (lineSensor[16]) {
-      display.fillRect(cx - r_outer -1, cy - 6, 3, 10, SSD1306_WHITE);
-  } else {
-      display.drawRect(cx - r_outer -1, cy - 6, 3, 10, SSD1306_WHITE);
-  }
-
-  // 後（18）
-  if (lineSensor[17]) {
-    display.fillRect(cx -4 , cy + r_outer - 3, 8, 3, SSD1306_WHITE);
-  } else {
-    display.drawRect(cx - 4, cy + r_outer - 3, 8, 3, SSD1306_WHITE);
-  }
-
-  // 右（19）
-  if (lineSensor[18]) {
-    display.fillRect(cx + r_outer -1, cy - 6, 3, 10, SSD1306_WHITE);
-  } else {
-    display.drawRect(cx + r_outer -1, cy - 6, 3, 10, SSD1306_WHITE);
   }
 }
 
@@ -1349,7 +1340,7 @@ void lcd_menu(){
   if(menu == 23){
     display.setCursor(10,0);
     display.println(">Back");
-    bool sensorValues[19] = {0};
+    bool sensorValues[RING_LINE] = {0};
     getLineSensorValues(sensorValues);
     lcd_drawLineSensors(sensorValues);
   }
@@ -1743,7 +1734,6 @@ void lcd_menu(){
 int getResetCause() {
   int cause = CAUSE_UNKNOWN;
 
-  // フラグのチェック（優先度の高い異常系から順に）
   if (__HAL_RCC_GET_FLAG(RCC_FLAG_LPWRRST)) {
     cause = CAUSE_LOW_POWER;
   } else if (__HAL_RCC_GET_FLAG(RCC_FLAG_WWDGRST)) {
@@ -1760,7 +1750,6 @@ int getResetCause() {
     cause = CAUSE_BROWNOUT;
   }
 
-  // 次回判定のためにフラグをクリア
   __HAL_RCC_CLEAR_RESET_FLAGS();
 
   return cause;
