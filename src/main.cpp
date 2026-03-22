@@ -106,7 +106,7 @@ Adafruit_BNO055 bno = Adafruit_BNO055(55, BNO055_ADDR, &Wire2);
 
 // DMA Setting
 #define SENSOR_CH 8
-#define SAMPLE_NUM 128
+#define SAMPLE_NUM 256  // default 128
 
 // HALハンドラ
 ADC_HandleTypeDef hadc1; //DMA
@@ -538,7 +538,7 @@ void TIM2_Init(void) {
 
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 83;   // 84MHz → 1MHz
-  htim2.Init.Period = 499;     // 1MHz / 500 = 2kHz
+  htim2.Init.Period = 99;     // default 499 (1MHz / 500 = 2kHz)
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
 
   HAL_TIM_Base_Init(&htim2);
