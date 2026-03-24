@@ -702,20 +702,22 @@ byte readEEPROM(int addr) {
 Ball getBall() {
   double X = 0;
   double Y = 0;
-  double distance_sum = 0;
 
   uint16_t min_val = sensor_avg[0];
   uint16_t max_val = sensor_avg[0];
+  int max_index = 0;
 
-  // min / max 取得（角度計算用）
+  // min / max 取得
   for(int i = 0; i < SENSOR_CH; i++){
     if(sensor_avg[i] < min_val) min_val = sensor_avg[i];
-    if(sensor_avg[i] > max_val) max_val = sensor_avg[i];
+    if(sensor_avg[i] > max_val){
+      max_val = sensor_avg[i];
+      max_index = i;
+    }
   }
 
+  // ===== 角度計算 =====
   for(int i = 0; i < SENSOR_CH; i++){
-
-    // ===== 角度用 weight（正規化） =====
     double val = (double)(max_val - sensor_avg[i]) / (max_val - min_val + 1);
 
     double weight_angle = val * val;
@@ -724,11 +726,6 @@ Ball getBall() {
 
     X += weight_angle * cos(rad);
     Y += weight_angle * sin(rad);
-
-    // ===== 距離用 weight（生強度） =====
-    double weight_dist = 4095 - sensor_avg[i];
-
-    distance_sum += weight_dist;
   }
 
   Ball ballinfo;
@@ -741,9 +738,34 @@ Ball getBall() {
   ballinfo.X = X;
   ballinfo.Y = Y;
 
-  // ----- 距離 -----
-  distance_sum /= 100.0;
-  ballinfo.Distance = distance_sum;
+  // ===== 距離計算（改良版） =====
+
+  // 強度（反転）
+  double intensity = 4095.0 - max_val;
+
+  // ゼロ防止
+  if(intensity < 1.0) intensity = 1.0;
+
+  // --- 距離モデル（要調整） ---
+  // まずはこれでOK（あとでキャリブ）
+  double distance = 300.0 / sqrt(intensity);
+
+  // --- 方向補正 ---
+  double angle_diff = wrapAngle180(angle - BALLANGLE[max_index]);
+
+  double correction = fabs(cos(angle_diff * PI / 180.0));
+  if(correction < 0.2) correction = 0.2;
+
+  distance /= correction;
+
+  static double distance_filtered = 0;
+  if(distance_filtered == 0) distance_filtered = distance;
+
+  double alpha = 0.6;
+  distance_filtered = distance_filtered * (1.0 - alpha) + distance * alpha;
+
+  ballinfo.Distance = distance_filtered;
+
 
   return ballinfo;
 }
