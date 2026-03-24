@@ -718,7 +718,12 @@ Ball getBall() {
 
   // ===== 角度計算 =====
   for(int i = 0; i < SENSOR_CH; i++){
-    double val = (double)(max_val - sensor_avg[i]) / (max_val - min_val + 1);
+    double denom = (double)(max_val - min_val);
+    if(denom < 1.0) denom = 1.0;  // 安全化
+
+    double val = (double)(max_val - sensor_avg[i]) / denom;
+
+    if (isnan(val) || isinf(val)) val = 0;
 
     double weight_angle = val * val;
 
@@ -730,42 +735,75 @@ Ball getBall() {
 
   Ball ballinfo;
 
-  // ----- 角度 -----
-  double angle = atan2(Y, X) * 180.0 / PI;
-  angle = wrapAngle180(angle);
+  // ===== 角度 =====
+  if (fabs(X) < 1e-6 && fabs(Y) < 1e-6) {
+    ballinfo.Angle = 0;
+  } else {
+    double angle = atan2(Y, X) * 180.0 / PI;
+    if (isnan(angle) || isinf(angle)) angle = 0;
+    ballinfo.Angle = wrapAngle180(angle);
+  }
 
-  ballinfo.Angle = angle;
   ballinfo.X = X;
   ballinfo.Y = Y;
 
-  // ===== 距離計算（改良版） =====
+  // ===== 距離 =====
 
-  // 強度（反転）
+  // 強度
   double intensity = 4095.0 - max_val;
+  if (intensity < 1.0 || isnan(intensity) || isinf(intensity)) {
+    intensity = 1.0;
+  }
 
-  // ゼロ防止
-  if(intensity < 1.0) intensity = 1.0;
-
-  // --- 距離モデル（要調整） ---
-  // まずはこれでOK（あとでキャリブ）
+  // 距離モデル
   double distance = 300.0 / sqrt(intensity);
+  if (isnan(distance) || isinf(distance)) {
+    distance = 0;
+  }
 
-  // --- 方向補正 ---
-  double angle_diff = wrapAngle180(angle - BALLANGLE[max_index]);
+  // 方向補正
+  double angle_diff = wrapAngle180(ballinfo.Angle - BALLANGLE[max_index]);
+  if (isnan(angle_diff) || isinf(angle_diff)) angle_diff = 0;
 
-  double correction = fabs(cos(angle_diff * PI / 180.0));
+  double correction = cos(angle_diff * PI / 180.0);
+  if (isnan(correction) || isinf(correction)) correction = 1.0;
+
+  correction = fabs(correction);
   if(correction < 0.2) correction = 0.2;
 
   distance /= correction;
 
+  // ===== フィルタ =====
   static double distance_filtered = 0;
-  if(distance_filtered == 0) distance_filtered = distance;
+  static double distance_last = 0;
 
-  double alpha = 0.6;
+  if(distance_filtered == 0) distance_filtered = distance;
+  if(distance_last == 0) distance_last = distance;
+
+  if (isnan(distance) || isinf(distance)) {
+    distance = distance_last;
+  }
+
+  double diff = fabs(distance - distance_last);
+
+  // ===== 信頼度 =====
+  double trust;
+
+  if(diff < 5) {
+    trust = 1.0;
+  }
+  else if(diff < 15) {
+    trust = 0.6;
+  }
+  else {
+    trust = 0.1;
+  }
+
+  double alpha = 0.6 * trust;
   distance_filtered = distance_filtered * (1.0 - alpha) + distance * alpha;
+  distance_last = distance_filtered;
 
   ballinfo.Distance = distance_filtered;
-
 
   return ballinfo;
 }
