@@ -497,12 +497,12 @@ void loop() {
 
       if(getTrace){
         if(linedist != -1 && lineAngle != -1){
-          vx = 0.5 * cos(lineAngle * DEG_TO_RAD) + cos(b.Angle * DEG_TO_RAD); // ラインとボールの両方が見えているときはベクトルを合成する
-          vy = -sin(lineAngle * DEG_TO_RAD) + 0.5 * sin(b.Angle * DEG_TO_RAD);
+          vx = 0.2 * cos(lineAngle * DEG_TO_RAD) + cos(b.Angle * DEG_TO_RAD); // ラインとボールの両方が見えているときはベクトルを合成する
+          vy = -sin(lineAngle * DEG_TO_RAD) + 0.2 * sin(b.Angle * DEG_TO_RAD);
           targetAngle = atan2(vy, vx) * RAD_TO_DEG;   //　ボールとラインのベクトルを合成する
           speed = (basespeed * 0.2 * (linedist / 100.0));  //0.2は仮
         }else{
-          targetAngle = 180; // ラインが見えなければ後退
+          //targetAngle = 180; // ラインが見えなければ後退
           speed = basespeed * 0.2; // 後退する速度、0.2は仮
         }
         
