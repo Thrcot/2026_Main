@@ -103,6 +103,7 @@ Adafruit_BNO055 bno = Adafruit_BNO055(55, BNO055_ADDR, &Wire2);
 #define LINE_CARIBRATION_ERROR 0xAE
 #define LINE_ANGLE_INFO 0xAF
 #define LINE_RESET 0xB0
+#define LINE_TRACE_INFO 0xB1
 
 // DMA Setting
 #define SENSOR_CH 8
@@ -145,10 +146,11 @@ constexpr int16_t kAccelRadius = 1000;
 constexpr int16_t kMagRadius = 1267;
 
 bool gameFlag = false;
-bool ImAttacker = true; // true: Attacker, false: Keeper
+bool ImAttacker = false; // true: Attacker, false: Keeper
 uint8_t line_threshold = 155;
 
 int PWM_limit = 250; // yukuyukuMD MAX is 250.
+int PID_limit = 160; // MD出力におけるPIDのPWM上限値(0~PWM_limit)
 
 int basespeed = 80;
 double Kp = 0.5;
@@ -191,6 +193,7 @@ Ball getBall();
 double getBallAngle();
 double getHeading();
 int16_t getLineAngle();
+bool getLineTraceAngle(int16_t *angle, int16_t *distance);
 void motor_test();
 void setMotor(int pwm, int MDpin1, int MDpin2);
 void move_motor(int speed, double target_angle, double heading, double tarHeading);
@@ -478,34 +481,40 @@ void loop() {
     } else {
       // Keeper algorithm(仮)
       SerialPC.println("[Debug] Game loop");
-      static int16_t lastLineAngle = -1;
-      static unsigned long lastLineTime = 0;
-      static int lineAngle = -1;
+      static int16_t lineAngle = -1;
+      static int16_t linedist = -1; 
       double speed = basespeed;
       double targetHeading = 0;
       double targetAngle = 0;
+      double vx = 0.0;
+      double vy = 0.0;
 
       Ball b = getBall();
-      speed = basespeed * fabs(sin(b.Angle * PI / 180.0));
-      if(b.Angle > 0 && b.Angle < 180){
-        targetAngle = 90;
+
+      bool getTrace = getLineTraceAngle(&lineAngle, &linedist);
+      lineAngle = wrapAngle180(lineAngle);
+      SerialPC.println(getTrace);
+
+      if(getTrace){
+        if(linedist != -1 && lineAngle != -1){
+          vx = 0.5 * cos(lineAngle * DEG_TO_RAD) + cos(b.Angle * DEG_TO_RAD); // ラインとボールの両方が見えているときはベクトルを合成する
+          vy = -sin(lineAngle * DEG_TO_RAD) + 0.5 * sin(b.Angle * DEG_TO_RAD);
+          targetAngle = atan2(vy, vx) * RAD_TO_DEG;   //　ボールとラインのベクトルを合成する
+          speed = (basespeed * 0.2 * (linedist / 100.0));  //0.2は仮
+        }else{
+          targetAngle = 180; // ラインが見えなければ後退
+          speed = basespeed * 0.2; // 後退する速度、0.2は仮
+        }
+        
       }else{
-        targetAngle  = -90;
+        targetAngle = 0;// 通信が上手くいっていないときは停止
+        speed = 0.0;
       }
+
 
       display.clearDisplay();
       lcd_drawarrow(targetAngle);
       display.display();
-
-      lineAngle = getLineAngle();   //ライン踏んだ時の移動角
-      if(lineAngle != -1){
-        lastLineAngle = lineAngle;
-        lastLineTime = millis();
-      }
-
-      if(lastLineAngle != -1 && (millis() - lastLineTime) < 50){  // 50msは後退する
-        targetAngle = wrapAngle180((double)lastLineAngle);
-      }
 
       double heading = getHeading();
 
@@ -958,6 +967,23 @@ int16_t getLineAngle() {
   return value;
 }
 
+bool getLineTraceAngle(int16_t *angle, int16_t *distance) {
+  SerialLine.write(LINE_TRACE_INFO);
+  unsigned long timeout = millis();
+  while (SerialLine.available() < 4) {  // int16_t が2つで合計4バイト
+    if (millis() - timeout > 10) {      // 10msタイムアウト
+      return false;  // タイムアウト時は false を返す
+    }
+  }
+
+  byte buffer[4];
+  SerialLine.readBytes(buffer, 4);
+  memcpy(angle, buffer, 2);
+  memcpy(distance, buffer + 2, 2);
+
+  return true;
+}
+
 void resetLineSensor() {
   SerialLine.write(LINE_RESET);
 }
@@ -1010,15 +1036,13 @@ void move_motor(int speed, double target_angle, double heading, double tarHeadin
   double m_fl = speed * tx_fl;
 
   // ---- 回転成分 ----
-  double omega = PID * (speed / 255.0);
+  double omega = PID * (PID_limit / 255.0);
 
   // ===== 比率リミット =====
-  double trans = speed;
-  double rot = fabs(omega);
+  double trans = max(max(fabs(m_fr), fabs(m_br)),max(fabs(m_bl), fabs(m_fl))); // 並進成分の最大値をとる
+  double rot = fabs(omega); // 回転成分の最大値(絶対値)をとる
 
-  double sum = trans + rot;
-
-  if (sum > 255.0) {
+  if (trans + rot > 255.0) {    //合計成分が最大値を超える時は6:4の比率で縮小する
     double trans_scale = (255.0 * 0.6) / trans;
     double rot_scale   = (255.0 * 0.4) / rot;
 
