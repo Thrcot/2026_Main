@@ -497,12 +497,12 @@ void loop() {
 
       if(getTrace){
         if(linedist != -1 && lineAngle != -1){
-          vx = 0.2 * cos(lineAngle * DEG_TO_RAD) + cos(b.Angle * DEG_TO_RAD); // ラインとボールの両方が見えているときはベクトルを合成する
-          vy = -sin(lineAngle * DEG_TO_RAD) + 0.2 * sin(b.Angle * DEG_TO_RAD);
+          vx = cos(lineAngle * DEG_TO_RAD); // ラインとボールの両方が見えているときはベクトルを合成する
+          vy = -sin(lineAngle * DEG_TO_RAD) + sin(b.Angle * DEG_TO_RAD);
           targetAngle = atan2(vy, vx) * RAD_TO_DEG;   //　ボールとラインのベクトルを合成する
-          speed = (basespeed * 0.2 * (linedist / 100.0));  //0.2は仮
+          speed = (basespeed * 0.15 * (linedist / 100.0));  //0.2は仮
         }else{
-          //targetAngle = 180; // ラインが見えなければ後退
+          targetAngle = 180; // ラインが見えなければ後退
           speed = basespeed * 0.2; // 後退する速度、0.2は仮
         }
         
@@ -1272,7 +1272,12 @@ void lcd_menu(){
     display.println("Debug");
     display.setCursor(10,16);
     display.println("Settings");
-
+    display.setCursor(10,24);
+    if(ImAttacker){
+      display.println("Mode: Attacker");
+    }else{
+      display.println("Mode: Defender");
+    }
   }
   if(menu == 10){
     display.setCursor(0, cursor * 8);
@@ -1516,6 +1521,9 @@ void lcd_menu(){
         menu = 20;
         cursor = 0;
       }
+      else if(cursor == 3){
+        ImAttacker = !ImAttacker;
+      }
     }
     else if(menu == 10){
       if(cursor == 0){
@@ -1758,7 +1766,7 @@ void lcd_menu(){
   //カーソル移動
   if(prevNext && !nowNext){
     cursor++;
-    if(menu == 0 && cursor > 2) cursor = 0;
+    if(menu == 0 && cursor > 3) cursor = 0;
     if(menu == 10 && cursor > 6) cursor = 0;
     if(menu == 11 && cursor > 0) cursor = 0;
     if(menu == 12 && cursor > 0) cursor = 0;
@@ -1780,7 +1788,7 @@ void lcd_menu(){
 
   if(prevBack && !nowBack){
     cursor--;
-    if(menu == 0 && cursor < 0) cursor = 2;
+    if(menu == 0 && cursor < 0) cursor = 3;
     if(menu == 10 && cursor < 0) cursor = 6;
     if(menu == 11 && cursor < 0) cursor = 0;
     if(menu == 12 && cursor < 0) cursor = 0;
