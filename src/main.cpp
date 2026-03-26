@@ -390,14 +390,20 @@ void loop() {
       double dBallErr = ballErr - prevBallErr;
       prevBallErr = ballErr;
 
-      double NearThr = 150;
+      double NearThr = 10.0;
       if (BallIsNear) {
-        NearThr = 120;
+        NearThr = 15.0;
       } else {
         ;
       }
 
-      if (b.Distance >= NearThr) {
+      if (b.Distance >= 100) {
+        BallIsNear = false;
+        speed = 0;
+      } else if (b.Distance >= NearThr) {
+        BallIsNear = false;
+        speed = basespeed + 50;
+      } else {
         BallIsNear = true;
         double KP_ball = 0.2;
         double KD_ball = 0.0;
@@ -418,12 +424,6 @@ void loop() {
         targetAngle = b.Angle + k * sin(rad) + pd;
 
         speed = basespeed * (0.7 + 0.3 * abs(cos(rad)));
-      } else if (b.Distance >= 10) {
-        BallIsNear = false;
-        speed = basespeed + 50;
-      } else {
-        BallIsNear = false;
-        speed = 0;
       }
 
       display.clearDisplay();
