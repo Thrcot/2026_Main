@@ -566,6 +566,7 @@ void loop() {
         if (DashToBall) {
           targetAngle = dashAngle;
           speed = basespeed;
+          digitalWrite(LED[0], HIGH);
           if (millis() - dashStartTime > 500) {   //ダッシュ時間500msは適当、要調整
             DashToBall = false;
             ReturnFromDash = true;
@@ -575,11 +576,14 @@ void loop() {
           // 戻り中
           targetAngle = wrapAngle180(dashAngle + 180.0);
           speed = basespeed * 0.5;
+          digitalWrite(LED[4], HIGH);
 
           // 生のライン再取得でのみ通常復帰
           if (hasRealLine) {
             ReturnFromDash = false;
             speed = basespeed;
+            digitalWrite(LED[0], LOW);
+            digitalWrite(LED[4], LOW);
           }
         }
         if(getTrace && !DashToBall && !ReturnFromDash){
@@ -589,7 +593,6 @@ void loop() {
             if(sidestate == 0 && (millis() - lastsideLineTime) > 200){   //サイドラインを踏んだら0.2秒は戻る
               vx = cos(lineAngle * DEG_TO_RAD);
               vy = 6 * sin(b.Angle * DEG_TO_RAD);
-              digitalWrite(LED[0], HIGH);
               digitalWrite(LED[2], LOW);
               digitalWrite(LED[6], LOW);
             } else if(sidestate == 1){
@@ -611,7 +614,7 @@ void loop() {
             targetAngle = 180.0;
             speed = basespeed;
           }
-          if (millis() - dashStartTime > 5000 && b.Distance < 15 && b.Angle > -45 && b.Angle < 45) {   //5秒に1回、ボールが近くにいて正面にいるときにダッシュ
+          if (millis() - dashStartTime > 5000 && b.Distance > 20 && b.Angle > -45 && b.Angle < 45) {   //5秒に1回、ボールが近くにいて正面にいるときにダッシュ
             DashToBall = true;
             ReturnFromDash = false;
             dashStartTime = millis();
