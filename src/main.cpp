@@ -529,14 +529,15 @@ void loop() {
         else if (ReturnFromDash) {
           // 戻り中
           targetAngle = wrapAngle180(dashAngle + 180.0);
-          speed = basespeed;
+          speed = basespeed * 0.75;
 
           // ライン再取得で通常復帰
           if (hasLine) {
             ReturnFromDash = false;
+            speed = basespeed;
           }
         }
-        else {
+        if(getTrace && !DashToBall && !ReturnFromDash){
           // 通常時
           if (hasLine) {
             OnLine = true;
