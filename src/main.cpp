@@ -563,6 +563,15 @@ void loop() {
         bool hasLine = (linedist != -1 && lineAngle != -1);
         bool isHeldLine = (sidestate == 3);
         bool hasRealLine = hasLine && !isHeldLine;
+        //デバッグ
+        if(isHeldLine){
+          digitalWrite(LED[7], HIGH);
+          digitalWrite(LED[1], HIGH);
+        }else{
+          digitalWrite(LED[7], LOW);
+          digitalWrite(LED[1], LOW);
+        }
+        
         if (DashToBall) {
           targetAngle = dashAngle;
           speed = basespeed;
