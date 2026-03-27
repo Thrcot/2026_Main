@@ -384,6 +384,7 @@ void loop() {
       static unsigned long lastLineFlagTime = 0;
       static int targetHeading = 0;
       static bool BallIsNear = false;
+      static bool BallIsNear2 = false;
       static bool ImOnCorner = false;
       double speed = basespeed;
 
@@ -399,38 +400,52 @@ void loop() {
 
       double NearThr = 10.0;
       if (BallIsNear) {
-        NearThr = 20.0;
+        NearThr = 15.0;
+      } else {
+        ;
+      }
+
+      double NearThr2 = 8.0;
+      if (BallIsNear2) {
+        NearThr2 = 13.0;
       } else {
         ;
       }
 
       if (b.Distance >= 200) {
         BallIsNear = false;
+        BallIsNear2 = false;
         speed = 0;
       } else if (b.Distance >= NearThr) {
         BallIsNear = false;
+        BallIsNear2 = false;
         speed = basespeed + 50;
       } else {
         BallIsNear = true;
         double KP_ball = 0.2;
         double KD_ball = 0.0;
-        double k = 90;
+        double k = 70;
 
-        /*
-        if (b.Distance >= 180) {
+        BallIsNear2 = false;
+
+        if (b.Distance <= NearThr2) {
           KP_ball = 0.1;
-          KD_ball = 0.01;
-          k = 100;
+          KD_ball = 0.0;
+          k = 90;
+          BallIsNear2 = true;
         }
-          */
 
+        if (abs(b.Angle) <= 15) {
+          targetAngle = b.Angle * 1.3;
+        } else {
         double rad = b.Angle * PI / 180.0;
         double frontGain = abs(sin(rad));
         double pd = KP_ball * ballErr + KD_ball * dBallErr;
 
-        targetAngle = b.Angle + k * sin(rad) + pd;
+        targetAngle = b.Angle * 1.2 + k * sin(rad) + pd;
 
         speed = basespeed * (0.7 + 0.3 * abs(cos(rad)));
+        }
       }
 
       display.clearDisplay();
@@ -485,10 +500,13 @@ void loop() {
       }
 
       int backtime = 5;
+      if (ImOnCorner) {
+        backtime = 500;
+      }
       if(lastLineAngle != -1 && (millis() - lastLineTime) < backtime){  // backtime msは後退する
         targetAngle = wrapAngle180((double)lastLineAngle);
       }
-      if(targetHeading != 0 && (millis() - lastHeadingTime) > 800){ // ライン踏んでから0.8秒後には目標角度をリセット
+      if(targetHeading != 0 && (millis() - lastHeadingTime) > 1500){ // ライン踏んでから1.5秒後には目標角度をリセット
         targetHeading = 0;
         ImOnCorner = false;
       }
