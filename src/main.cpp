@@ -599,7 +599,8 @@ void loop() {
           // 通常時
           if (hasLine) {
             OnLine = true;
-            if(sidestate == 0 && (millis() - lastsideLineTime) > 200){   //サイドラインを踏んだら0.2秒は戻る
+            if(sidestate == 0 && (millis() - lastsideLineTime) > 10){   //サイドラインを踏んだら0.2秒は戻る
+              speed = basespeed + 50;
               vx = cos(lineAngle * DEG_TO_RAD);
               vy = 6 * sin(b.Angle * DEG_TO_RAD);
               digitalWrite(LED[2], LOW);
