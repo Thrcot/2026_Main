@@ -543,6 +543,8 @@ void loop() {
       }
       else {
         bool hasLine = (linedist != -1 && lineAngle != -1);
+        bool isHeldLine = (sidestate == 3);
+        bool hasRealLine = hasLine && !isHeldLine;
         if (DashToBall) {
           targetAngle = dashAngle;
           speed = basespeed;
@@ -556,8 +558,8 @@ void loop() {
           targetAngle = wrapAngle180(dashAngle + 180.0);
           speed = basespeed * 0.5;
 
-          // ライン再取得で通常復帰
-          if (hasLine) {
+          // 生のライン再取得でのみ通常復帰
+          if (hasRealLine) {
             ReturnFromDash = false;
             speed = basespeed;
           }
