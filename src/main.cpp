@@ -600,7 +600,7 @@ void loop() {
           if (hasLine) {
             OnLine = true;
             if(sidestate == 0 && (millis() - lastsideLineTime) > 10){   //サイドラインを踏んだら0.2秒は戻る
-              speed = basespeed + 50;
+              speed = basespeed + 80;
               vx = cos(lineAngle * DEG_TO_RAD);
               vy = 6 * sin(b.Angle * DEG_TO_RAD);
               digitalWrite(LED[2], LOW);
@@ -663,7 +663,6 @@ void loop() {
           digitalWrite(LED[i], LOW);
         }
       }
-      delay(1);
     }
   }else{
     lcd_menu();
