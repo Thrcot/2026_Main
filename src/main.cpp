@@ -427,7 +427,7 @@ void loop() {
       }
 
       display.clearDisplay();
-      lcd_drawarrow(targetAngle);
+      //lcd_drawarrow(targetAngle);
       display.display();
 
       lineAngle = getLineAngle();   //ライン踏んだ時の移動角
@@ -512,8 +512,8 @@ void loop() {
         bool hasLine = (linedist != -1 && lineAngle != -1);
         if (DashToBall) {
           targetAngle = dashAngle;
-          speed = basespeed * 0.3;
-          if (millis() - dashStartTime > 1000) {
+          speed = basespeed;
+          if (millis() - dashStartTime > 250) {   //ダッシュ時間250msは適当、要調整
             DashToBall = false;
             ReturnFromDash = true;
           }
@@ -521,7 +521,7 @@ void loop() {
         else if (ReturnFromDash) {
           // 戻り中
           targetAngle = wrapAngle180(dashAngle + 180.0);
-          speed = basespeed * 0.2;
+          speed = basespeed;
 
           // ライン再取得で通常復帰
           if (hasLine) {
@@ -532,31 +532,39 @@ void loop() {
           // 通常時
           if (hasLine) {
             OnLine = true;
-            vx = cos(lineAngle * DEG_TO_RAD);
-            vy = -sin(lineAngle * DEG_TO_RAD) + sin(b.Angle * DEG_TO_RAD);
+            if(lineAngle > -30 && lineAngle < 30){
+              vx = cos(lineAngle * DEG_TO_RAD);
+              vy = 4 * sin(b.Angle * DEG_TO_RAD);
+            } else if(lineAngle <= -30){  //左端検知
+              //仮で45°に前進させる
+              vx = 1;
+              vy = 1;
+            } else if(lineAngle >= 30){  //右端検知
+              vx = 1;
+              vy = -1;
+            }
             targetAngle = wrapAngle180(atan2(vy, vx) * RAD_TO_DEG);
-            speed = basespeed * 0.15 * (linedist / 100.0);
+            speed = basespeed * (0.7 + (0.3 * (linedist / 100.0)));
           }
           else {
             OnLine = false;
             targetAngle = 180.0;
-            speed = basespeed * 0.2;
+            speed = basespeed;
           }
-
-          if (OnLine && b.Distance < 50 && b.Angle > -90 && b.Angle < 90) {
+          if (millis() - dashStartTime > 5000 && b.Distance < 4 && b.Angle > -45 && b.Angle < 45) {   //5秒に1回、ボールが近くにいて正面にいるときにダッシュ
             DashToBall = true;
             ReturnFromDash = false;
             dashStartTime = millis();
             dashAngle = wrapAngle180(b.Angle);
 
             targetAngle = dashAngle;
-            speed = basespeed * 0.3;
+            speed = basespeed;
           }
         }
       }
 
       display.clearDisplay();
-      lcd_drawarrow(targetAngle);
+      //lcd_drawarrow(targetAngle);
       display.display();
 
       double heading = getHeading();
