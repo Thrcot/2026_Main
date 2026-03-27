@@ -481,49 +481,113 @@ void loop() {
     } else {
       // Keeper algorithm(仮)
       SerialPC.println("[Debug] Game loop");
-      static int16_t lineAngle = -1;
-      static int16_t linedist = -1; 
-      double speed = basespeed;
-      double targetHeading = 0;
-      double targetAngle = 0;
+
+      static bool DashToBall = false;
+      static bool ReturnFromDash = false;
+      static unsigned long dashStartTime = 0;
+      static double dashAngle = 0.0;
+
+      int16_t lineAngle = -1;
+      int16_t linedist = -1;
+
+      double speed = 0.0;
+      double targetHeading = 0.0;
+      double targetAngle = 0.0;
+      bool OnLine = false;
       double vx = 0.0;
       double vy = 0.0;
 
       Ball b = getBall();
 
       bool getTrace = getLineTraceAngle(&lineAngle, &linedist);
-      lineAngle = wrapAngle180(lineAngle);
-      SerialPC.println(getTrace);
 
-      if(getTrace){
-        if(linedist != -1 && lineAngle != -1){
-          vx = cos(lineAngle * DEG_TO_RAD); // ラインとボールの両方が見えているときはベクトルを合成する
-          vy = -sin(lineAngle * DEG_TO_RAD) + sin(b.Angle * DEG_TO_RAD);
-          targetAngle = atan2(vy, vx) * RAD_TO_DEG;   //　ボールとラインのベクトルを合成する
-          speed = (basespeed * 0.15 * (linedist / 100.0));  //0.2は仮
-        }else{
-          targetAngle = 180; // ラインが見えなければ後退
-          speed = basespeed * 0.2; // 後退する速度、0.2は仮
-        }
-        
-      }else{
-        targetAngle = 0;// 通信が上手くいっていないときは停止
-        speed = 0.0;
+      if (lineAngle != -1) {
+        lineAngle = wrapAngle180(lineAngle);
       }
 
+      SerialPC.println(getTrace);
+
+      if (!getTrace) {
+        targetAngle = 0.0;
+        speed = 0.0;
+      }
+      else {
+        bool hasLine = (linedist != -1 && lineAngle != -1);
+
+        if (DashToBall) {
+          // ダッシュ中
+          targetAngle = dashAngle;
+          speed = basespeed * 0.3;
+
+          if (millis() - dashStartTime > 1000) {
+            DashToBall = false;
+            ReturnFromDash = true;
+          }
+        }
+        else if (ReturnFromDash) {
+          // 戻り中
+          targetAngle = wrapAngle180(dashAngle + 180.0);
+          speed = basespeed * 0.2;
+
+          // ライン再取得で通常復帰
+          if (hasLine) {
+            ReturnFromDash = false;
+          }
+
+          // 長引きすぎた時の保険
+          if (millis() - dashStartTime > 1600) {
+            ReturnFromDash = false;
+          }
+        }
+        else {
+          // 通常時
+          if (hasLine) {
+            OnLine = true;
+
+            // ラインとボールのベクトルを簡易合成
+            vx = cos(lineAngle * DEG_TO_RAD);
+            vy = -sin(lineAngle * DEG_TO_RAD) + sin(b.Angle * DEG_TO_RAD);
+
+            targetAngle = wrapAngle180(atan2(vy, vx) * RAD_TO_DEG);
+
+            double lineRatio = linedist / 100.0;
+            if (lineRatio < 0.0) lineRatio = 0.0;
+            if (lineRatio > 1.0) lineRatio = 1.0;
+
+            speed = basespeed * 0.15 * lineRatio;
+          }
+          else {
+            OnLine = false;
+            targetAngle = 180.0;
+            speed = basespeed * 0.2;
+          }
+
+          // ダッシュ開始条件
+          if (OnLine && b.Distance < 50 && b.Angle > -90 && b.Angle < 90) {
+            DashToBall = true;
+            ReturnFromDash = false;
+            dashStartTime = millis();
+            dashAngle = wrapAngle180(b.Angle);
+
+            targetAngle = dashAngle;
+            speed = basespeed * 0.3;
+          }
+        }
+      }
 
       display.clearDisplay();
       lcd_drawarrow(targetAngle);
       display.display();
 
       double heading = getHeading();
-
       move_motor(speed, targetAngle, heading, targetHeading);
 
       kick();
 
       if (!digitalRead(Pause)) {
         gameFlag = false;
+        DashToBall = false;
+        ReturnFromDash = false;
         resetLineSensor();
         setMotor(0, FL_FWD, FL_REV);
         setMotor(0, BL_FWD, BL_REV);
@@ -533,6 +597,7 @@ void loop() {
           digitalWrite(LED[i], LOW);
         }
       }
+
       delay(1);
     }
   }else{
