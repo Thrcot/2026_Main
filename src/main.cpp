@@ -504,21 +504,15 @@ void loop() {
       if (lineAngle != -1) {
         lineAngle = wrapAngle180(lineAngle);
       }
-
-      SerialPC.println(getTrace);
-
       if (!getTrace) {
         targetAngle = 0.0;
         speed = 0.0;
       }
       else {
         bool hasLine = (linedist != -1 && lineAngle != -1);
-
         if (DashToBall) {
-          // ダッシュ中
           targetAngle = dashAngle;
           speed = basespeed * 0.3;
-
           if (millis() - dashStartTime > 1000) {
             DashToBall = false;
             ReturnFromDash = true;
@@ -533,28 +527,15 @@ void loop() {
           if (hasLine) {
             ReturnFromDash = false;
           }
-
-          // 長引きすぎた時の保険
-          if (millis() - dashStartTime > 1600) {
-            ReturnFromDash = false;
-          }
         }
         else {
           // 通常時
           if (hasLine) {
             OnLine = true;
-
-            // ラインとボールのベクトルを簡易合成
             vx = cos(lineAngle * DEG_TO_RAD);
             vy = -sin(lineAngle * DEG_TO_RAD) + sin(b.Angle * DEG_TO_RAD);
-
             targetAngle = wrapAngle180(atan2(vy, vx) * RAD_TO_DEG);
-
-            double lineRatio = linedist / 100.0;
-            if (lineRatio < 0.0) lineRatio = 0.0;
-            if (lineRatio > 1.0) lineRatio = 1.0;
-
-            speed = basespeed * 0.15 * lineRatio;
+            speed = basespeed * 0.15 * (linedist / 100.0);
           }
           else {
             OnLine = false;
@@ -562,7 +543,6 @@ void loop() {
             speed = basespeed * 0.2;
           }
 
-          // ダッシュ開始条件
           if (OnLine && b.Distance < 50 && b.Angle > -90 && b.Angle < 90) {
             DashToBall = true;
             ReturnFromDash = false;
@@ -597,7 +577,6 @@ void loop() {
           digitalWrite(LED[i], LOW);
         }
       }
-
       delay(1);
     }
   }else{
