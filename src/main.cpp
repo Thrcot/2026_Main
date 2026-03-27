@@ -108,7 +108,7 @@ Adafruit_BNO055 bno = Adafruit_BNO055(55, BNO055_ADDR, &Wire2);
 
 // DMA Setting
 #define SENSOR_CH 8
-#define SAMPLE_NUM 256  // default 128
+#define SAMPLE_NUM 128  // default 128
 
 // HALハンドラ
 ADC_HandleTypeDef hadc1; //DMA
@@ -398,12 +398,12 @@ void loop() {
 
       double NearThr = 10.0;
       if (BallIsNear) {
-        NearThr = 15.0;
+        NearThr = 20.0;
       } else {
         ;
       }
 
-      if (b.Distance >= 100) {
+      if (b.Distance >= 200) {
         BallIsNear = false;
         speed = 0;
       } else if (b.Distance >= NearThr) {
@@ -413,7 +413,7 @@ void loop() {
         BallIsNear = true;
         double KP_ball = 0.2;
         double KD_ball = 0.0;
-        double k = 80;
+        double k = 90;
 
         /*
         if (b.Distance >= 180) {
@@ -441,6 +441,7 @@ void loop() {
         speed += 30;
         lastLineAngle = lineAngle;
         lastLineTime = millis();
+
         if (!ImOnCorner) {
           if((lineAngle > 125) && (lineAngle < 145)){
             ImOnCorner = true;
@@ -459,7 +460,6 @@ void loop() {
       }
 
       int backtime = 5;
-
       if(lastLineAngle != -1 && (millis() - lastLineTime) < backtime){  // backtime msは後退する
         targetAngle = wrapAngle180((double)lastLineAngle);
       }
@@ -483,7 +483,7 @@ void loop() {
           digitalWrite(LED[i], LOW);
         }
       }
-      delay(1);
+
     } else {
       // Keeper algorithm(仮)
       SerialPC.println("[Debug] Game loop");
@@ -613,7 +613,7 @@ void TIM2_Init(void) {
 
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 83;   // 84MHz → 1MHz
-  htim2.Init.Period = 99;     // default 499 (1MHz / 500 = 2kHz)
+  htim2.Init.Period = 499;     // default 499 (1MHz / 500 = 2kHz)
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
 
   HAL_TIM_Base_Init(&htim2);
@@ -727,13 +727,27 @@ void ADC2_Init(void) {
 }
 
 void processADC() {
+  static bool initialized = false;
+
   for(int ch=0; ch<SENSOR_CH; ch++) {
     uint32_t sum = 0;
     for(int i=0;i<SAMPLE_NUM;i++)
       sum += adc_buf[ch + i*SENSOR_CH];
 
-    sensor_avg[ch] = sum / SAMPLE_NUM;
+    double raw = (double)sum / SAMPLE_NUM;
+
+    // 初期化（超重要）
+    if(!initialized){
+      sensor_avg[ch] = raw;
+    } else {
+      // LPF
+      double alpha = 0.3;
+      sensor_avg[ch] = sensor_avg[ch] * (1.0 - alpha)
+                     + raw * alpha;
+    }
   }
+
+  initialized = true;
 }
 
 uint16_t readCatch() {
