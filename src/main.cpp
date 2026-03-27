@@ -571,7 +571,7 @@ void loop() {
           digitalWrite(LED[7], LOW);
           digitalWrite(LED[1], LOW);
         }
-        
+
         if (DashToBall) {
           targetAngle = dashAngle;
           speed = basespeed;
@@ -616,6 +616,9 @@ void loop() {
               vy = 1;
               lastsideLineTime = millis();
               digitalWrite(LED[6 ], HIGH);
+            } else if(sidestate == 3){
+              vx = cos(lineAngle * DEG_TO_RAD);
+              vy = sin(b.Angle * DEG_TO_RAD);
             }
             targetAngle = wrapAngle180(atan2(vy, vx) * RAD_TO_DEG);
             speed = basespeed * (0.7 + (0.3 * (linedist / 100.0)));
