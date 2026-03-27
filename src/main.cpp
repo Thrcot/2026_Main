@@ -89,6 +89,7 @@ TwoWire Wire2(I2C2_SDA, I2C2_SCL);
 #define EE_PID_KP 0x0002  //EEPROMアドレス、8バイト保存
 #define EE_PID_KI 0x000A  //EEPROMアドレス、8バイト保存
 #define EE_PID_KD 0x0012  //EEPROMアドレス、8バイト保存
+#define EE_AttackOrDefence 0x001A  //EEPROMアドレス、1バイト保存
 
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 64 // OLED display height, in pixels
@@ -185,6 +186,7 @@ void TIM2_Init(void);
 void ADC1_DMA_Init(void);
 void ADC2_Init(void);
 void processADC();
+void kick();
 uint16_t readCatch();
 double wrapAngle180(double angle);
 void writeEEPROM(int addr, byte data);
@@ -194,15 +196,15 @@ double getBallAngle();
 double getHeading();
 int16_t getLineAngle();
 bool getLineTraceAngle(int16_t *angle, int16_t *distance);
+bool getLineSensorValues(bool lineSensor[RING_LINE]);
+void lineCalibration();
+int getResetCause();
 void motor_test();
 void setMotor(int pwm, int MDpin1, int MDpin2);
 void move_motor(int speed, double target_angle, double heading, double tarHeading);
-void kick();
 void lcd_drawarrow(double angle);
 void lcd_drawLineSensors(bool lineSensor[RING_LINE]);
 void lcd_menu();
-bool getLineSensorValues(bool lineSensor[RING_LINE]);
-void lineCalibration();
 void resetLineSensor();
 void resetHeadingZero();
 void setLineThreshold(uint8_t threshold);
@@ -212,7 +214,8 @@ void saveSpeed(uint8_t speed);
 uint8_t loadSpeed();
 void savePIDgain(double Kp, double Ki, double Kd);
 void loadPIDgain(double *Kp, double *Ki, double *Kd);
-int getResetCause();
+void saveImAttacker(bool ImAttacker);
+bool loadImAttacker();
 
 // HAL Callback
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
@@ -356,6 +359,8 @@ void setup() {
   SerialPC.println("[Debug] Getting reset cause");
   resetCause = getResetCause();
   SerialPC.println("[Debug] Done");
+
+  ImAttacker = loadImAttacker();
 
   SerialPC.println("[Debug] Setup end");
 }
@@ -983,6 +988,17 @@ void loadPIDgain(double *Kp, double *Ki, double *Kd) {
   if(!isnan(kp_eep)) *Kp = kp_eep;
   if(!isnan(ki_eep)) *Ki = ki_eep;
   if(!isnan(kd_eep)) *Kd = kd_eep;
+}
+
+void saveImAttacker (bool ImAttacker){
+  uint8_t val = ImAttacker ? 1 : 0;
+  writeEEPROM(EE_AttackOrDefence, val);
+}
+
+bool loadImAttacker(){
+  uint8_t val = readEEPROM(EE_AttackOrDefence);
+  if (val == 1) return true;
+  else return false;
 }
 
 double getHeading() {
