@@ -193,7 +193,7 @@ Ball getBall();
 double getBallAngle();
 double getHeading();
 int16_t getLineAngle();
-bool getLineTraceAngle(int16_t *angle, int16_t *distance);
+bool getLineTraceAngle(int16_t *angle, int16_t *distance, int8_t *sidestate);
 void motor_test();
 void setMotor(int pwm, int MDpin1, int MDpin2);
 void move_motor(int speed, double target_angle, double heading, double tarHeading);
@@ -489,6 +489,7 @@ void loop() {
 
       int16_t lineAngle = -1;
       int16_t linedist = -1;
+      int8_t sidestate = 0; // 0: no line, 1: right line, 2: left line
 
       double speed = 0.0;
       double targetHeading = 0.0;
@@ -499,7 +500,7 @@ void loop() {
 
       Ball b = getBall();
 
-      bool getTrace = getLineTraceAngle(&lineAngle, &linedist);
+      bool getTrace = getLineTraceAngle(&lineAngle, &linedist, &sidestate);
 
       if (lineAngle != -1) {
         lineAngle = wrapAngle180(lineAngle);
@@ -513,7 +514,7 @@ void loop() {
         if (DashToBall) {
           targetAngle = dashAngle;
           speed = basespeed;
-          if (millis() - dashStartTime > 250) {   //ダッシュ時間250msは適当、要調整
+          if (millis() - dashStartTime > 500) {   //ダッシュ時間500msは適当、要調整
             DashToBall = false;
             ReturnFromDash = true;
           }
@@ -532,16 +533,15 @@ void loop() {
           // 通常時
           if (hasLine) {
             OnLine = true;
-            if(lineAngle > -30 && lineAngle < 30){
+            if(sidestate == 0){     
               vx = cos(lineAngle * DEG_TO_RAD);
               vy = 4 * sin(b.Angle * DEG_TO_RAD);
-            } else if(lineAngle <= -30){  //左端検知
-              //仮で45°に前進させる
-              vx = 1;
-              vy = 1;
-            } else if(lineAngle >= 30){  //右端検知
-              vx = 1;
+            } else if(sidestate == 1){
+              vx = 0.5;
               vy = -1;
+            } else if(sidestate == 2){
+              vx = 0.5;
+              vy = 1;
             }
             targetAngle = wrapAngle180(atan2(vy, vx) * RAD_TO_DEG);
             speed = basespeed * (0.7 + (0.3 * (linedist / 100.0)));
@@ -551,7 +551,7 @@ void loop() {
             targetAngle = 180.0;
             speed = basespeed;
           }
-          if (millis() - dashStartTime > 5000 && b.Distance < 4 && b.Angle > -45 && b.Angle < 45) {   //5秒に1回、ボールが近くにいて正面にいるときにダッシュ
+          if (millis() - dashStartTime > 5000 && b.Distance < 15 && b.Angle > -45 && b.Angle < 45) {   //5秒に1回、ボールが近くにいて正面にいるときにダッシュ
             DashToBall = true;
             ReturnFromDash = false;
             dashStartTime = millis();
@@ -1019,19 +1019,20 @@ int16_t getLineAngle() {
   return value;
 }
 
-bool getLineTraceAngle(int16_t *angle, int16_t *distance) {
+bool getLineTraceAngle(int16_t *angle, int16_t *distance, int8_t *sidestate) {
   SerialLine.write(LINE_TRACE_INFO);
   unsigned long timeout = millis();
-  while (SerialLine.available() < 4) {  // int16_t が2つで合計4バイト
+  while (SerialLine.available() < 5) {  // int16_t が2つとint8_tが1つで合計5バイト
     if (millis() - timeout > 10) {      // 10msタイムアウト
       return false;  // タイムアウト時は false を返す
     }
   }
 
-  byte buffer[4];
-  SerialLine.readBytes(buffer, 4);
+  byte buffer[5];
+  SerialLine.readBytes(buffer, 5);
   memcpy(angle, buffer, 2);
   memcpy(distance, buffer + 2, 2);
+  memcpy(sidestate, buffer + 4, 1);
 
   return true;
 }
