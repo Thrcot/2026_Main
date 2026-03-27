@@ -1591,6 +1591,7 @@ void lcd_menu(){
       }
       else if(cursor == 3){
         ImAttacker = !ImAttacker;
+        saveImAttacker(ImAttacker);
       }
     }
     else if(menu == 10){
