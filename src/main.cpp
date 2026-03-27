@@ -595,6 +595,8 @@ void loop() {
               vy = 6 * sin(b.Angle * DEG_TO_RAD);
               digitalWrite(LED[2], LOW);
               digitalWrite(LED[6], LOW);
+              digitalWrite(LED[0], LOW);
+              digitalWrite(LED[4], LOW);
             } else if(sidestate == 1){
               vx = 0.1;
               vy = -1;
