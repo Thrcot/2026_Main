@@ -496,13 +496,14 @@ void loop() {
       int16_t lineAngle = -1;
       int16_t linedist = -1;
       int8_t sidestate = 0; // 0: no line, 1: right line, 2: left line
+      static unsigned long lastsideLineTime = 0;
 
       double speed = 0.0;
       double targetHeading = 0.0;
       double targetAngle = 0.0;
       bool OnLine = false;
-      double vx = 0.0;
-      double vy = 0.0;
+      static double vx = 0.0;
+      static double vy = 0.0;
 
       Ball b = getBall();
 
@@ -539,15 +540,22 @@ void loop() {
           // 通常時
           if (hasLine) {
             OnLine = true;
-            if(sidestate == 0){     
+            if(sidestate == 0 && (millis() - lastsideLineTime) > 200){   //サイドラインを踏んだら0.2秒は戻る
               vx = cos(lineAngle * DEG_TO_RAD);
-              vy = 4 * sin(b.Angle * DEG_TO_RAD);
+              vy = 6 * sin(b.Angle * DEG_TO_RAD);
+              digitalWrite(LED[0], HIGH);
+              digitalWrite(LED[2], LOW);
+              digitalWrite(LED[6], LOW);
             } else if(sidestate == 1){
-              vx = 0.5;
+              vx = 0.1;
               vy = -1;
+              lastsideLineTime = millis();
+              digitalWrite(LED[2], HIGH);
             } else if(sidestate == 2){
-              vx = 0.5;
+              vx = 0.1;
               vy = 1;
+              lastsideLineTime = millis();
+              digitalWrite(LED[6 ], HIGH);
             }
             targetAngle = wrapAngle180(atan2(vy, vx) * RAD_TO_DEG);
             speed = basespeed * (0.7 + (0.3 * (linedist / 100.0)));
@@ -876,7 +884,7 @@ Ball getBall() {
 }
 
 bool getLineSensorValues(bool lineSensor[RING_LINE]) {
-  for (int i = 0; i < 19; i++) lineSensor[i] = false;
+  for (int i = 0; i < 16; i++) lineSensor[i] = false;
 
   SerialLine.write(LINE_SENSOR_INFO); // センサに情報要求
   unsigned long startTime = millis();
@@ -904,7 +912,7 @@ bool getLineSensorValues(bool lineSensor[RING_LINE]) {
                   ((uint32_t)buffer[1] << 8) |
                   buffer[0];
 
-  // 19センサ分に展開
+  // 16センサ分に展開
   for (int i = 0; i < RING_LINE; i++) {
       lineSensor[i] = (bits >> i) & 0x01;
   }
@@ -1252,7 +1260,7 @@ void lcd_drawLineSensors(bool lineSensor[RING_LINE]) {
 }
 
 void lineCalibration() {
-  bool sensorValues[19];
+  bool sensorValues[16];
   line_threshold = 0;  // 初期しきい値
   bool success;
 
@@ -1279,7 +1287,7 @@ void lineCalibration() {
 
       // センサが全て反応しなくなったか確認
       bool allOff = true;
-      for (int i = 0; i < 19; i++) {
+      for (int i = 0; i < 16; i++) {
           if (sensorValues[i] == 1) {
               allOff = false;
               if(line_threshold < 253){
