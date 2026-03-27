@@ -629,7 +629,7 @@ void loop() {
             targetAngle = 180.0;
             speed = basespeed;
           }
-          if (millis() - dashStartTime > 5000 && b.Distance > 20 && b.Angle > -45 && b.Angle < 45) {   //5秒に1回、ボールが近くにいて正面にいるときにダッシュ
+          if (millis() - dashStartTime > 5000 && b.Distance > 60 && b.Angle > -45 && b.Angle < 45) {   //5秒に1回、ボールが近くにいて正面にいるときにダッシュ
             DashToBall = true;
             ReturnFromDash = false;
             dashStartTime = millis();
