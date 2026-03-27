@@ -381,6 +381,7 @@ void loop() {
       static unsigned long lastLineTime = 0;
       static int lineAngle = -1;
       static unsigned long lastHeadingTime = 0;
+      static unsigned long lastLineFlagTime = 0;
       static int targetHeading = 0;
       static bool BallIsNear = false;
       static bool ImOnCorner = false;
@@ -439,22 +440,46 @@ void loop() {
       lineAngle = getLineAngle();   //ライン踏んだ時の移動角
       if(lineAngle != -1){
         speed += 30;
-        lastLineAngle = lineAngle;
-        lastLineTime = millis();
-
         if (!ImOnCorner) {
-          if((lineAngle > 125) && (lineAngle < 145)){
-            ImOnCorner = true;
-            targetHeading = -73;
-            lastHeadingTime = millis();
-          }else if((lineAngle > 215) && (lineAngle < 235)){
-            ImOnCorner = true;
-            targetHeading = 73;
-            lastHeadingTime = millis();
-          } else {
-            ImOnCorner = false;
+
+          // --- 有効な角度のみ処理 ---
+          if (((lineAngle >= 70) && (lineAngle <= 110)) || ((lineAngle >= 160) && (lineAngle <= 200)) || ((lineAngle >= 250) && (lineAngle <= 290))) {
+
+            // --- 前回との組み合わせを見る ---
+            if (millis() - lastLineTime <= 1000) {
+
+              // 180 → 90
+              if (lastLineAngle == 180 && lineAngle == 90) {
+                ImOnCorner = true;
+                targetHeading = -73;
+                lastHeadingTime = millis();
+              }
+
+              // 180 → 270
+              else if (lastLineAngle == 180 && lineAngle == 270) {
+                ImOnCorner = true;
+                targetHeading = 73;
+                lastHeadingTime = millis();
+              }
+
+              // 90 → 180
+              else if (lastLineAngle == 90 && lineAngle == 180) {
+                ImOnCorner = true;
+                targetHeading = -73;
+                lastHeadingTime = millis();
+              }
+
+              // 270 → 180
+              else if (lastLineAngle == 270 && lineAngle == 180) {
+                ImOnCorner = true;
+                targetHeading = 73;
+                lastHeadingTime = millis();
+              }
+            }
           }
         }
+        lastLineAngle = lineAngle;
+        lastLineTime = millis();
       } else {
 
       }
@@ -529,7 +554,7 @@ void loop() {
         else if (ReturnFromDash) {
           // 戻り中
           targetAngle = wrapAngle180(dashAngle + 180.0);
-          speed = basespeed * 0.75;
+          speed = basespeed * 0.5;
 
           // ライン再取得で通常復帰
           if (hasLine) {
@@ -1208,6 +1233,7 @@ void motor_test(){
 void kick() {
   static bool catching = false;
   static uint32_t lastCatchTime = 0;
+  static uint32_t lastKickTime = 0;
   uint16_t catchval = readCatch();
   if (catchval < 200) { //ボール保持判定
     if (!catching) {
@@ -1215,7 +1241,10 @@ void kick() {
       catching = true;
     }
     if (catching && millis() - lastCatchTime > 10 && millis() - lastCatchTime < 100) {
-      digitalWrite(Kick, HIGH);
+      if (millis() - lastKickTime > 1000) {
+        lastKickTime = millis();
+        digitalWrite(Kick, HIGH);
+      }
     } else if(millis() - lastCatchTime >= 100) {
       digitalWrite(Kick, LOW);
       catching = false;
