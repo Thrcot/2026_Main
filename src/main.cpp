@@ -386,6 +386,8 @@ void loop() {
       static bool BallIsNear = false;
       static bool BallIsNear2 = false;
       static bool ImOnCorner = false;
+      static bool ImGoingAround = false;
+      static bool ImGoingAround2 = false;
       double speed = basespeed;
 
       Ball b = getBall();
@@ -400,7 +402,7 @@ void loop() {
 
       double NearThr = 10.0;
       if (BallIsNear) {
-        NearThr = 18.0;
+        NearThr = 15.0;
       } else {
         ;
       }
@@ -416,35 +418,63 @@ void loop() {
         BallIsNear = false;
         BallIsNear2 = false;
         speed = 0;
-      } else if (b.Distance >= NearThr) {
+
+      } else if ((b.Distance >= NearThr) && !ImGoingAround && !ImGoingAround2) {
         BallIsNear = false;
         BallIsNear2 = false;
         speed = basespeed + 50;
+
       } else {
         BallIsNear = true;
+
         double KP_ball = 0.2;
         double KD_ball = 0.0;
         double k = 70;
 
         BallIsNear2 = false;
 
-        if (b.Distance < NearThr2) {
+        // =========================
+        // ★ 最優先：回り込み2維持
+        // =========================
+        if (ImGoingAround2) {
           KP_ball = 0.1;
           KD_ball = 0.0;
           k = 90;
           BallIsNear2 = true;
+
+        // =========================
+        // ★ 突入条件
+        // =========================
+        } else if (b.Distance < NearThr2) {
+          KP_ball = 0.1;
+          KD_ball = 0.0;
+          k = 90;
+          BallIsNear2 = true;
+          ImGoingAround2 = true;
         }
 
+        // =========================
+        // ★ 抜け条件（別管理）
+        // =========================
+        if (ImGoingAround2 && abs(b.Angle) <= 10) {
+          ImGoingAround2 = false;
+        }
+
+        // =========================
+        // ★ 通常回り込み制御
+        // =========================
         if (abs(b.Angle) <= 15) {
+          ImGoingAround = false;
           targetAngle = b.Angle * 1.3;
+
         } else {
-        double rad = b.Angle * PI / 180.0;
-        double frontGain = abs(sin(rad));
-        double pd = KP_ball * ballErr + KD_ball * dBallErr;
+          double rad = b.Angle * PI / 180.0;
+          double pd = KP_ball * ballErr + KD_ball * dBallErr;
 
-        targetAngle = b.Angle * 1.2 + k * sin(rad) + pd;
+          targetAngle = b.Angle * 1.2 + k * sin(rad) + pd;
+          speed = basespeed * (0.7 + 0.3 * abs(cos(rad)));
 
-        speed = basespeed * (0.7 + 0.3 * abs(cos(rad)));
+          ImGoingAround = true;
         }
       }
 
@@ -1243,7 +1273,7 @@ void kick() {
   static uint32_t lastCatchTime = 0;
   static uint32_t lastKickTime = 0;
   uint16_t catchval = readCatch();
-  if (catchval < 300) { //ボール保持判定
+  if (catchval < 250) { //ボール保持判定
     if (!catching) {
       lastCatchTime = millis();
       catching = true;
