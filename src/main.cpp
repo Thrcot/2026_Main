@@ -400,14 +400,14 @@ void loop() {
 
       double NearThr = 10.0;
       if (BallIsNear) {
-        NearThr = 25.0;
+        NearThr = 18.0;
       } else {
         ;
       }
 
       double NearThr2 = 10.0;
       if (BallIsNear2) {
-        NearThr2 = 18.0;
+        NearThr2 = 13.0;
       } else {
         ;
       }
