@@ -414,12 +414,12 @@ void loop() {
         ;
       }
 
-      if (b.Distance >= 300) {
+      if (b.Distance >= 350) {
         BallIsNear = false;
         BallIsNear2 = false;
         speed = 0;
 
-      } else if ((b.Distance >= NearThr) && !ImGoingAround && !ImGoingAround2) {
+      } else if ((b.Distance >= NearThr)) {
         BallIsNear = false;
         BallIsNear2 = false;
         speed = basespeed + 50;
@@ -429,7 +429,7 @@ void loop() {
 
         double KP_ball = 0.2;
         double KD_ball = 0.0;
-        double k = 70;
+        double k = 50;
 
         BallIsNear2 = false;
 
@@ -439,19 +439,21 @@ void loop() {
         if (ImGoingAround2) {
           KP_ball = 0.1;
           KD_ball = 0.0;
-          k = 90;
+          k = 85;
           BallIsNear2 = true;
 
         // =========================
         // ★ 突入条件
         // =========================
-        } else if (b.Distance < NearThr2) {
+        
+        } /*else if (b.Distance < NearThr2) {
           KP_ball = 0.1;
           KD_ball = 0.0;
           k = 90;
           BallIsNear2 = true;
           ImGoingAround2 = true;
         }
+          */
 
         // =========================
         // ★ 抜け条件（別管理）
