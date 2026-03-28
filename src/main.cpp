@@ -400,19 +400,19 @@ void loop() {
 
       double NearThr = 10.0;
       if (BallIsNear) {
-        NearThr = 20.0;
+        NearThr = 25.0;
       } else {
         ;
       }
 
-      double NearThr2 = 8.0;
+      double NearThr2 = 10.0;
       if (BallIsNear2) {
-        NearThr2 = 13.0;
+        NearThr2 = 18.0;
       } else {
         ;
       }
 
-      if (b.Distance >= 200) {
+      if (b.Distance >= 300) {
         BallIsNear = false;
         BallIsNear2 = false;
         speed = 0;
@@ -428,7 +428,7 @@ void loop() {
 
         BallIsNear2 = false;
 
-        if (b.Distance <= NearThr2) {
+        if (b.Distance < NearThr2) {
           KP_ball = 0.1;
           KD_ball = 0.0;
           k = 90;
@@ -563,19 +563,9 @@ void loop() {
         bool hasLine = (linedist != -1 && lineAngle != -1);
         bool isHeldLine = (sidestate == 3);
         bool hasRealLine = hasLine && !isHeldLine;
-        //デバッグ
-        if(isHeldLine){
-          digitalWrite(LED[7], HIGH);
-          digitalWrite(LED[1], HIGH);
-        }else{
-          digitalWrite(LED[7], LOW);
-          digitalWrite(LED[1], LOW);
-        }
-
         if (DashToBall) {
           targetAngle = dashAngle;
           speed = basespeed;
-          digitalWrite(LED[0], HIGH);
           if (millis() - dashStartTime > 500) {   //ダッシュ時間500msは適当、要調整
             DashToBall = false;
             ReturnFromDash = true;
@@ -585,14 +575,11 @@ void loop() {
           // 戻り中
           targetAngle = wrapAngle180(dashAngle + 180.0);
           speed = basespeed * 0.5;
-          digitalWrite(LED[4], HIGH);
 
           // 生のライン再取得でのみ通常復帰
           if (hasRealLine) {
             ReturnFromDash = false;
             speed = basespeed;
-            digitalWrite(LED[0], LOW);
-            digitalWrite(LED[4], LOW);
           }
         }
         if(getTrace && !DashToBall && !ReturnFromDash){
@@ -603,20 +590,14 @@ void loop() {
               speed = basespeed + 80;
               vx = cos(lineAngle * DEG_TO_RAD);
               vy = 6 * sin(b.Angle * DEG_TO_RAD);
-              digitalWrite(LED[2], LOW);
-              digitalWrite(LED[6], LOW);
-              digitalWrite(LED[0], LOW);
-              digitalWrite(LED[4], LOW);
             } else if(sidestate == 1){
               vx = 0.1;
               vy = -1;
               lastsideLineTime = millis();
-              digitalWrite(LED[2], HIGH);
             } else if(sidestate == 2){
               vx = 0.1;
               vy = 1;
               lastsideLineTime = millis();
-              digitalWrite(LED[6 ], HIGH);
             } else if(sidestate == 3){
               vx = cos(lineAngle * DEG_TO_RAD);
               vy = sin(b.Angle * DEG_TO_RAD);
@@ -629,7 +610,7 @@ void loop() {
             targetAngle = 180.0;
             speed = basespeed;
           }
-          if (millis() - dashStartTime > 5000 && b.Distance > 60 && b.Angle > -45 && b.Angle < 45) {   //5秒に1回、ボールが近くにいて正面にいるときにダッシュ
+          if (millis() - dashStartTime > 5000 && b.Distance > 60 && b.Angle > -45 && b.Angle < 45 && sidestate == 0) {   //5秒に1回、ボールが近くにいて正面にいるときにダッシュ
             DashToBall = true;
             ReturnFromDash = false;
             dashStartTime = millis();
@@ -1272,7 +1253,7 @@ void kick() {
   static uint32_t lastCatchTime = 0;
   static uint32_t lastKickTime = 0;
   uint16_t catchval = readCatch();
-  if (catchval < 200) { //ボール保持判定
+  if (catchval < 300) { //ボール保持判定
     if (!catching) {
       lastCatchTime = millis();
       catching = true;
