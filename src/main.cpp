@@ -402,9 +402,9 @@ void loop() {
       double dBallErr = ballErr - prevBallErr;
       prevBallErr = ballErr;
 
-      double NearThr = 13.0;
+      double NearThr = 15.0;
       if (BallIsNear) {
-        NearThr = 15.0;
+        NearThr = 25.0;
       } else {
         ;
       }
@@ -528,7 +528,7 @@ void loop() {
 
       double heading = getHeading();
 
-      if (millis() - StartTime < 1500) {
+      if (millis() - StartTime < 800) {
         speed = basespeed + 80;
       }
 
