@@ -378,7 +378,7 @@ void loop() {
   if(gameFlag == true){
     if (ImAttacker == true) {
       // Attacker algorithm
-      //SerialPC.println("[Debug] Game loop");
+
       static int16_t lastLineAngle = -1;
       static unsigned long lastLineTime = 0;
       static int lineAngle = -1;
@@ -396,11 +396,6 @@ void loop() {
       double targetAngle = b.Angle;
       double ballX = b.X;
       double ballY = b.Y;
-
-      static double prevBallErr = 0;
-      double ballErr = b.Angle;
-      double dBallErr = ballErr - prevBallErr;
-      prevBallErr = ballErr;
 
       double NearThr = 15.0;
       if (BallIsNear) {
@@ -456,14 +451,22 @@ void loop() {
           double vx = tangentline_x + ball_x;
           double vy = tangentline_y + ball_y;
 
+          // -----
+          static double prevErrX = 0.0;
+
+          double errX = vx;
+          double dErrX = errX - prevErrX;
+          prevErrX = errX;
+
+          double kp_x = 0.14;
+          double kd_x = 2.6;
+          double corrX = kp_x * errX + kd_x * dErrX;
+          vx -= corrX;
+          // -----
           targetAngle = wrapAngle180(atan2(vy, vx) * RAD_TO_DEG);
         } else {
           targetAngle = b.Angle;
         }
-
-        display.clearDisplay();
-        lcd_drawarrow(targetAngle);
-        display.display();
       }
 
 
@@ -505,6 +508,24 @@ void loop() {
                 targetHeading = 73;
                 lastHeadingTime = millis();
               }
+            }
+          }
+
+          if (((lineAngle >= 70) && (lineAngle <= 110)) && ((targetAngle > -180) && (targetAngle < 0))) {
+            if ((targetAngle > -180) && (targetAngle < -90)) {
+              targetAngle = -180;
+            } else if ((targetAngle > 0) && (targetAngle < 90)) {
+              targetAngle = 0;
+            } else {
+              ;
+            }
+          } else if (((lineAngle >= 250) && (lineAngle <= 290)) && ((targetAngle > 0) && (targetAngle < 180))) {
+            if ((targetAngle > 0) && (targetAngle < 90)) {
+              targetAngle = 0;
+            } else if ((targetAngle > 90) && (targetAngle < 180)) {
+              targetAngle = 180;
+            } else {
+              ;
             }
           }
         }
