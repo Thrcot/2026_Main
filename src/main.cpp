@@ -326,9 +326,17 @@ void setup() {
   //bno.setMode(OPERATION_MODE_IMUPLUS);
 
   for (int i = 0; i < 8; i++) {
+    digitalWrite(LED[i], HIGH);
+  }
+  delay(200);
+  for (int i = 0; i < 8; i++) {
     digitalWrite(LED[i], LOW);
   }
-  delay(500);
+  delay(200);
+  for (int i = 0; i < 8; i++) {
+    digitalWrite(LED[i], HIGH);
+  }
+
   resetHeadingZero();
 
   SerialPC.println("[Debug] Line initialize");
@@ -354,6 +362,9 @@ void setup() {
   ADC2_Init();
 
   delay(1000);
+  for (int i = 0; i < 8; i++) {
+    digitalWrite(LED[i], LOW);
+  }
   display.clearDisplay();
   display.display();
 
@@ -416,6 +427,11 @@ void loop() {
         BallIsNear = false;
         BallIsNear2 = false;
         speed = basespeed + 30;
+        if (targetAngle >= 165 && targetAngle <= 180) {
+          targetAngle = -165;
+        } else if (targetAngle >= -180 && targetAngle <= -165) {
+          targetAngle = 165;
+        }
 
       } else {
         BallIsNear = true;
