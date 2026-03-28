@@ -445,10 +445,10 @@ void loop() {
           }
 
           double ballW = (cos(b.Angle * DEG_TO_RAD) + 1.0) / 2.0;
-          double tanW  = 1 - ((cos(b.Angle * DEG_TO_RAD) + 1.0) / 2.0);  //回り込みベクトル
+          double tanW  = 1.5 - ((cos(b.Angle * DEG_TO_RAD) + 1.0) / 2.0);  //回り込みベクトル
 
-          double tangentline_x = cos(tangentlineAngle * DEG_TO_RAD) * tanW ;
-          double tangentline_y = sin(tangentlineAngle * DEG_TO_RAD) * tanW ;
+          double tangentline_x = cos(tangentlineAngle * DEG_TO_RAD) * tanW * 8.0;
+          double tangentline_y = sin(tangentlineAngle * DEG_TO_RAD) * tanW * 4.0;
 
           double ball_x = cos(b.Angle * DEG_TO_RAD) * ballW;
           double ball_y = sin(b.Angle * DEG_TO_RAD) * ballW;
@@ -549,7 +549,6 @@ void loop() {
     } else {
       // Keeper algorithm(仮)
       SerialPC.println("[Debug] Game loop");
-      static bool firstlinedetect = false;
       static bool DashToBall = false;
       static bool ReturnFromDash = false;
       static unsigned long dashStartTime = 0;
@@ -596,7 +595,6 @@ void loop() {
         if(getTrace && !DashToBall && !ReturnFromDash){
           // 通常時
           if (hasLine) {
-            firstlinedetect = true;
             OnLine = true;
             if(sidestate == 0 && (millis() - lastsideLineTime) > 10){   //サイドラインを踏んだら0.2秒は戻る
               speed = basespeed + 80;
@@ -622,7 +620,7 @@ void loop() {
             targetAngle = 180.0;
             speed = basespeed;
           }
-          if (millis() - dashStartTime > 5000 && b.Distance > 60 && b.Angle > -45 && b.Angle < 45 && sidestate == 0 && firstlinedetect) {   //5秒に1回、ボールが近くにいて正面にいるときにダッシュ
+          if (millis() - dashStartTime > 5000 && b.Distance > 60 && b.Angle > -45 && b.Angle < 45 && sidestate == 0) {   //5秒に1回、ボールが近くにいて正面にいるときにダッシュ
             DashToBall = true;
             ReturnFromDash = false;
             dashStartTime = millis();
@@ -1658,6 +1656,7 @@ void lcd_menu(){
     if(menu == 0){
       if(cursor == 0){
         resetLineSensor();
+        StartTime = millis();
         gameFlag = true;
       }
       else if(cursor == 1){
