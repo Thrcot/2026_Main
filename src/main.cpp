@@ -804,7 +804,7 @@ void processADC() {
       sensor_avg[ch] = raw;
     } else {
       // LPF
-      double alpha = 0.3;
+      double alpha = 0.28;
       sensor_avg[ch] = sensor_avg[ch] * (1.0 - alpha)
                      + raw * alpha;
     }
