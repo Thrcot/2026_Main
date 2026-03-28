@@ -425,12 +425,12 @@ void loop() {
         double absA  = fabs(alpha);
 
         //ここらへんいじる
-        const double START_ANGLE = 0.0;   //回り込み開始角度
-        const double STOP_ANGLE  = 0.0;   //回り込み終了角度(0なら常時回り込み)
-        const double FULL_ANGLE  = 120.0; //(OFFSET_MAXが最大になる)回り込みが最大になる角度
+        const double START_ANGLE = 15.0;   //回り込み開始角度
+        const double STOP_ANGLE  = 10.0;   //回り込み終了角度(0なら常時回り込み)
+        const double FULL_ANGLE  = 90.0; //(OFFSET_MAXが最大になる)回り込みが最大になる角度
         const double OFFSET_MAX  = 90.0;  //回り込み最大オフセット角度
 
-        const double KD_OFFSET = 0.5;     //回り込みのDゲイン
+        const double KD_OFFSET = 0.0;     //回り込みのDゲイン
 
         static double prevErr = 0.0;
         static unsigned long prevTime = 0;
@@ -466,7 +466,7 @@ void loop() {
           // ベースオフセット
           // オフセット選択
           double baseoffset = OFFSET_MAX * u;                               //線形オフセット 
-          //double baseoffset = OFFSET_MAX * u * u;                         //2次オフセット(最初は鈍く、だんだん大きくなる) 
+          //double baseoffset = OFFSET_MAX * u * u;                         //2次オフセット(最初は鈍く、だんだん大きくなる) ←これすき
           //double baseoffset = OFFSET_MAX * (1.0 - (1.0 - u) * (1.0 - u)); //2次オフセット(最初は大きく、だんだん鈍くなる) 
           //double baseoffset = OFFSET_MAX * (3*u*u - 2*u*u*u);             //3次オフセット(最初は鈍く、だんんと大きくなって最後は鈍くなる)
           if (alpha < 0.0) baseoffset = -baseoffset;
