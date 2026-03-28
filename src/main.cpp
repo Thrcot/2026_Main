@@ -326,17 +326,9 @@ void setup() {
   //bno.setMode(OPERATION_MODE_IMUPLUS);
 
   for (int i = 0; i < 8; i++) {
-    digitalWrite(LED[i], HIGH);
-  }
-  delay(200);
-  for (int i = 0; i < 8; i++) {
     digitalWrite(LED[i], LOW);
   }
-  delay(200);
-  for (int i = 0; i < 8; i++) {
-    digitalWrite(LED[i], HIGH);
-  }
-
+  delay(500);
   resetHeadingZero();
 
   SerialPC.println("[Debug] Line initialize");
@@ -362,9 +354,6 @@ void setup() {
   ADC2_Init();
 
   delay(1000);
-  for (int i = 0; i < 8; i++) {
-    digitalWrite(LED[i], LOW);
-  }
   display.clearDisplay();
   display.display();
 
@@ -387,7 +376,7 @@ void loop() {
   if(gameFlag == true){
     if (ImAttacker == true) {
       // Attacker algorithm
-      SerialPC.println("[Debug] Game loop");
+      //SerialPC.println("[Debug] Game loop");
       static int16_t lastLineAngle = -1;
       static unsigned long lastLineTime = 0;
       static int lineAngle = -1;
@@ -426,40 +415,49 @@ void loop() {
       } else if ((b.Distance >= NearThr)) {
         BallIsNear = false;
         BallIsNear2 = false;
-        speed = basespeed + 30;
-        if (targetAngle >= 165 && targetAngle <= 180) {
-          targetAngle = -165;
-        } else if (targetAngle >= -180 && targetAngle <= -165) {
-          targetAngle = 165;
-        }
+        speed = basespeed + 20;
 
       } else {
         BallIsNear = true;
 
-        double KP_ball = 0.2;
-        double KD_ball = 0.04;
-        double k = 50;
+        double absAngle = fabs(b.Angle);
 
-        // =========================
-        // ★ 通常回り込み制御
-        // =========================
-        if (abs(b.Angle) <= 15) {
-          ImGoingAround = false;
-          targetAngle = b.Angle * 1.2;
+        if (absAngle > 1.0) {
+          double tangentlineAngle;
+
+          if (b.Angle < 0) {
+            tangentlineAngle = wrapAngle180(b.Angle - 90.0);
+          } else {
+            tangentlineAngle = wrapAngle180(b.Angle + 90.0);
+          }
+
+          // 前側に出た接線を後ろ側へ反転
+          if (tangentlineAngle > -90.0 && tangentlineAngle < 90.0) {
+            tangentlineAngle = wrapAngle180(tangentlineAngle + 180.0);
+          }
+
+          double ballW = (cos(b.Angle * DEG_TO_RAD) + 1.0) / 2.0;
+          double tanW  = 1 - ((cos(b.Angle * DEG_TO_RAD) + 1.0) / 2.0);  //回り込みベクトル
+
+          double tangentline_x = cos(tangentlineAngle * DEG_TO_RAD) * tanW * 4.0;
+          double tangentline_y = sin(tangentlineAngle * DEG_TO_RAD) * tanW * 1.0;
+
+          double ball_x = cos(b.Angle * DEG_TO_RAD) * ballW;
+          double ball_y = sin(b.Angle * DEG_TO_RAD) * ballW;
+
+          double vx = tangentline_x + ball_x;
+          double vy = tangentline_y + ball_y;
+
+          targetAngle = wrapAngle180(atan2(vy, vx) * RAD_TO_DEG);
         } else {
-          double rad = b.Angle * PI / 180.0;
-          double pd = KP_ball * ballErr + KD_ball * dBallErr;
-
-          targetAngle = b.Angle * 1.0 + k * sin(rad) + pd;
-          speed = basespeed * (0.7 + 0.3 * abs(cos(rad)));
-
-          ImGoingAround = true;
+          targetAngle = b.Angle;
         }
+
+        display.clearDisplay();
+        lcd_drawarrow(targetAngle);
+        display.display();
       }
 
-      display.clearDisplay();
-      //lcd_drawarrow(targetAngle);
-      display.display();
 
       lineAngle = getLineAngle();   //ライン踏んだ時の移動角
       if(lineAngle != -1){
@@ -522,7 +520,7 @@ void loop() {
 
       double heading = getHeading();
 
-      move_motor(speed, targetAngle, heading, targetHeading);
+      //move_motor(speed, targetAngle, heading, targetHeading);
       kick();
 
       if (!digitalRead(Pause)) {
