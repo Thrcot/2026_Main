@@ -439,8 +439,8 @@ void loop() {
           double ballW = (cos(b.Angle * DEG_TO_RAD) + 1.0) / 2.0;
           double tanW  = 1 - ((cos(b.Angle * DEG_TO_RAD) + 1.0) / 2.0);  //回り込みベクトル
 
-          double tangentline_x = cos(tangentlineAngle * DEG_TO_RAD) * tanW * 4.0;
-          double tangentline_y = sin(tangentlineAngle * DEG_TO_RAD) * tanW * 1.0;
+          double tangentline_x = cos(tangentlineAngle * DEG_TO_RAD) * tanW ;
+          double tangentline_y = sin(tangentlineAngle * DEG_TO_RAD) * tanW ;
 
           double ball_x = cos(b.Angle * DEG_TO_RAD) * ballW;
           double ball_y = sin(b.Angle * DEG_TO_RAD) * ballW;
@@ -520,7 +520,7 @@ void loop() {
 
       double heading = getHeading();
 
-      //move_motor(speed, targetAngle, heading, targetHeading);
+      move_motor(speed, targetAngle, heading, targetHeading);
       kick();
 
       if (!digitalRead(Pause)) {
