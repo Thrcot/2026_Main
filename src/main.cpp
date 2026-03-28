@@ -415,7 +415,7 @@ void loop() {
       } else if ((b.Distance >= NearThr)) {
         BallIsNear = false;
         BallIsNear2 = false;
-        speed = basespeed + 60;
+        speed = basespeed + 30;
 
       } else {
         BallIsNear = true;
