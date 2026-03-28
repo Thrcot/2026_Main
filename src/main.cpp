@@ -419,6 +419,12 @@ void loop() {
         BallIsNear2 = false;
         speed = basespeed + 20;
 
+        if (targetAngle >= 165 && targetAngle <= 180) {
+          targetAngle = -165;
+        } else if (targetAngle >= -180 && targetAngle <= -165) {
+          targetAngle = 165;
+        }
+
       } else {
         BallIsNear = true;
 
