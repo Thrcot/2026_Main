@@ -851,12 +851,7 @@ Ball getBall() {
 
   // ===== 角度計算 =====
   for(int i = 0; i < SENSOR_CH; i++){
-    double denom = (double)(max_val - min_val);
-    if(denom < 1.0) denom = 1.0;  // 安全化
-
-    double val = (double)(max_val - sensor_avg[i]) / denom;
-
-    if (isnan(val) || isinf(val)) val = 0;
+    double val = (double)(max_val - sensor_avg[i]) / (max_val - min_val + 1);
 
     double weight_angle = val * val;
 
@@ -869,13 +864,8 @@ Ball getBall() {
   Ball ballinfo;
 
   // ===== 角度 =====
-  if (fabs(X) < 1e-6 && fabs(Y) < 1e-6) {
-    ballinfo.Angle = 0;
-  } else {
-    double angle = atan2(Y, X) * 180.0 / PI;
-    if (isnan(angle) || isinf(angle)) angle = 0;
-    ballinfo.Angle = wrapAngle180(angle);
-  }
+  double angle = atan2(Y, X) * 180.0 / PI;
+  ballinfo.Angle = wrapAngle180(angle);
 
   ballinfo.X = X;
   ballinfo.Y = Y;
