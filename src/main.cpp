@@ -400,16 +400,9 @@ void loop() {
       double dBallErr = ballErr - prevBallErr;
       prevBallErr = ballErr;
 
-      double NearThr = 10.0;
+      double NearThr = 13.0;
       if (BallIsNear) {
         NearThr = 15.0;
-      } else {
-        ;
-      }
-
-      double NearThr2 = 10.0;
-      if (BallIsNear2) {
-        NearThr2 = 13.0;
       } else {
         ;
       }
@@ -422,58 +415,26 @@ void loop() {
       } else if ((b.Distance >= NearThr)) {
         BallIsNear = false;
         BallIsNear2 = false;
-        speed = basespeed + 50;
+        speed = basespeed + 60;
 
       } else {
         BallIsNear = true;
 
         double KP_ball = 0.2;
-        double KD_ball = 0.0;
+        double KD_ball = 0.04;
         double k = 50;
-
-        BallIsNear2 = false;
-
-        // =========================
-        // ★ 最優先：回り込み2維持
-        // =========================
-        if (ImGoingAround2) {
-          KP_ball = 0.1;
-          KD_ball = 0.0;
-          k = 85;
-          BallIsNear2 = true;
-
-        // =========================
-        // ★ 突入条件
-        // =========================
-        
-        } /*else if (b.Distance < NearThr2) {
-          KP_ball = 0.1;
-          KD_ball = 0.0;
-          k = 90;
-          BallIsNear2 = true;
-          ImGoingAround2 = true;
-        }
-          */
-
-        // =========================
-        // ★ 抜け条件（別管理）
-        // =========================
-        if (ImGoingAround2 && abs(b.Angle) <= 10) {
-          ImGoingAround2 = false;
-        }
 
         // =========================
         // ★ 通常回り込み制御
         // =========================
         if (abs(b.Angle) <= 15) {
           ImGoingAround = false;
-          targetAngle = b.Angle * 1.3;
-
+          targetAngle = b.Angle * 1.2;
         } else {
           double rad = b.Angle * PI / 180.0;
           double pd = KP_ball * ballErr + KD_ball * dBallErr;
 
-          targetAngle = b.Angle * 1.2 + k * sin(rad) + pd;
+          targetAngle = b.Angle * 1.0 + k * sin(rad) + pd;
           speed = basespeed * (0.7 + 0.3 * abs(cos(rad)));
 
           ImGoingAround = true;
