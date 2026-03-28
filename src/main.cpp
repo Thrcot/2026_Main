@@ -167,6 +167,8 @@ double KD_ball = 0.03;
 double headingOffset = 0.0;
 double prevTime = 0.0;
 
+unsigned long StartTime = 0;
+
 // Reset ID
 enum ResetCause {
   CAUSE_UNKNOWN = 0,
@@ -520,6 +522,10 @@ void loop() {
 
       double heading = getHeading();
 
+      if (millis() - StartTime < 1500) {
+        speed = basespeed + 80;
+      }
+
       move_motor(speed, targetAngle, heading, targetHeading);
       kick();
 
@@ -573,7 +579,12 @@ void loop() {
         if (DashToBall) {
           targetAngle = dashAngle;
           speed = basespeed;
-          if (millis() - dashStartTime > 500) {   //ダッシュ時間500msは適当、要調整
+          double DTime = 500;
+          if (abs(targetAngle) < 20) {
+            speed = basespeed + 30;
+            DTime = 1500;
+          }
+          if (millis() - dashStartTime > DTime) {   //ダッシュ時間500msは適当、要調整
             DashToBall = false;
             ReturnFromDash = true;
           }
