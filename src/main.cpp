@@ -549,7 +549,7 @@ void loop() {
     } else {
       // Keeper algorithm(仮)
       SerialPC.println("[Debug] Game loop");
-
+      static bool firstlinedetect = false;
       static bool DashToBall = false;
       static bool ReturnFromDash = false;
       static unsigned long dashStartTime = 0;
@@ -582,20 +582,7 @@ void loop() {
         bool hasLine = (linedist != -1 && lineAngle != -1);
         bool isHeldLine = (sidestate == 3);
         bool hasRealLine = hasLine && !isHeldLine;
-        if (DashToBall) {
-          targetAngle = dashAngle;
-          speed = basespeed;
-          double DTime = 500;
-          if (abs(targetAngle) < 20) {
-            speed = basespeed + 30;
-            DTime = 1500;
-          }
-          if (millis() - dashStartTime > DTime) {   //ダッシュ時間500msは適当、要調整
-            DashToBall = false;
-            ReturnFromDash = true;
-          }
-        }
-        else if (ReturnFromDash) {
+        if (ReturnFromDash) {
           // 戻り中
           targetAngle = wrapAngle180(dashAngle + 180.0);
           speed = basespeed * 0.5;
@@ -609,6 +596,7 @@ void loop() {
         if(getTrace && !DashToBall && !ReturnFromDash){
           // 通常時
           if (hasLine) {
+            firstlinedetect = true;
             OnLine = true;
             if(sidestate == 0 && (millis() - lastsideLineTime) > 10){   //サイドラインを踏んだら0.2秒は戻る
               speed = basespeed + 80;
@@ -634,14 +622,19 @@ void loop() {
             targetAngle = 180.0;
             speed = basespeed;
           }
-          if (millis() - dashStartTime > 5000 && b.Distance > 60 && b.Angle > -45 && b.Angle < 45 && sidestate == 0) {   //5秒に1回、ボールが近くにいて正面にいるときにダッシュ
+          if (millis() - dashStartTime > 5000 && b.Distance > 60 && b.Angle > -45 && b.Angle < 45 && sidestate == 0 && firstlinedetect) {   //5秒に1回、ボールが近くにいて正面にいるときにダッシュ
             DashToBall = true;
             ReturnFromDash = false;
             dashStartTime = millis();
             dashAngle = wrapAngle180(b.Angle);
 
             targetAngle = dashAngle;
-            speed = basespeed;
+            if(b.Angle > -10 && b.Angle < 10 ){
+              speed = basespeed + 20;
+            }else{
+              speed = basespeed;
+            }
+
           }
         }
       }
