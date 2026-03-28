@@ -445,9 +445,9 @@ void loop() {
           }
 
           double ballW = (cos(b.Angle * DEG_TO_RAD) + 1.0) / 2.0;
-          double tanW  = 1.5 - ((cos(b.Angle * DEG_TO_RAD) + 1.0) / 2.0);  //回り込みベクトル
+          double tanW  = 1.0 - ((cos(b.Angle * DEG_TO_RAD) + 1.0) / 2.0);  //回り込みベクトル
 
-          double tangentline_x = cos(tangentlineAngle * DEG_TO_RAD) * tanW * 8.0;
+          double tangentline_x = cos(tangentlineAngle * DEG_TO_RAD) * tanW * 4.0;
           double tangentline_y = sin(tangentlineAngle * DEG_TO_RAD) * tanW * 4.0;
 
           double ball_x = cos(b.Angle * DEG_TO_RAD) * ballW;
@@ -549,6 +549,7 @@ void loop() {
     } else {
       // Keeper algorithm(仮)
       SerialPC.println("[Debug] Game loop");
+
       static bool DashToBall = false;
       static bool ReturnFromDash = false;
       static unsigned long dashStartTime = 0;
@@ -581,7 +582,15 @@ void loop() {
         bool hasLine = (linedist != -1 && lineAngle != -1);
         bool isHeldLine = (sidestate == 3);
         bool hasRealLine = hasLine && !isHeldLine;
-        if (ReturnFromDash) {
+        if (DashToBall) {
+          targetAngle = dashAngle;
+          speed = basespeed;
+          if (millis() - dashStartTime > 500) {   //ダッシュ時間500msは適当、要調整
+            DashToBall = false;
+            ReturnFromDash = true;
+          }
+        }
+        else if (ReturnFromDash) {
           // 戻り中
           targetAngle = wrapAngle180(dashAngle + 180.0);
           speed = basespeed * 0.5;
@@ -627,12 +636,7 @@ void loop() {
             dashAngle = wrapAngle180(b.Angle);
 
             targetAngle = dashAngle;
-            if(b.Angle > -10 && b.Angle < 10 ){
-              speed = basespeed + 20;
-            }else{
-              speed = basespeed;
-            }
-
+            speed = basespeed;
           }
         }
       }
