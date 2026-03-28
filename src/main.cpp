@@ -430,7 +430,7 @@ void loop() {
 
         double absAngle = fabs(b.Angle);
 
-        if (absAngle > 1.0) {
+        if (absAngle > 5.0) {
           double tangentlineAngle;
 
           if (b.Angle < 0) {
@@ -447,8 +447,8 @@ void loop() {
           double ballW = (cos(b.Angle * DEG_TO_RAD) + 1.0) / 2.0;
           double tanW  = 1.0 - ((cos(b.Angle * DEG_TO_RAD) + 1.0) / 2.0);  //回り込みベクトル
 
-          double tangentline_x = cos(tangentlineAngle * DEG_TO_RAD) * tanW * 4.0;
-          double tangentline_y = sin(tangentlineAngle * DEG_TO_RAD) * tanW * 4.0;
+          double tangentline_x = cos(tangentlineAngle * DEG_TO_RAD) * tanW * 3.5;
+          double tangentline_y = sin(tangentlineAngle * DEG_TO_RAD) * tanW * 2.0;
 
           double ball_x = cos(b.Angle * DEG_TO_RAD) * ballW;
           double ball_y = sin(b.Angle * DEG_TO_RAD) * ballW;
@@ -529,7 +529,7 @@ void loop() {
       double heading = getHeading();
 
       if (millis() - StartTime < 800) {
-        speed = basespeed + 80;
+        speed = basespeed + 90;
       }
 
       move_motor(speed, targetAngle, heading, targetHeading);
