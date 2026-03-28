@@ -389,7 +389,6 @@ void loop() {
       static bool BallIsNear2 = false;
       static bool ImOnCorner = false;
       static bool ImGoingAround = false;
-      static bool ImGoingAround2 = false;
       double speed = basespeed;
 
       Ball b = getBall();
@@ -419,56 +418,126 @@ void loop() {
         } else if (targetAngle >= -180 && targetAngle <= -165) {
           targetAngle = 165;
         }
-
       } else {
         BallIsNear = true;
 
-        double absAngle = fabs(b.Angle);
+        double alpha = wrapAngle180(b.Angle);
+        double absA  = fabs(alpha);
 
-        if (absAngle > 5.0) {
-          double tangentlineAngle;
+        //ここらへんいじる
+        const double START_ANGLE = 0.0;   //回り込み開始角度
+        const double STOP_ANGLE  = 0.0;   //回り込み終了角度(0なら常時回り込み)
+        const double FULL_ANGLE  = 120.0; //(OFFSET_MAXが最大になる)回り込みが最大になる角度
+        const double OFFSET_MAX  = 90.0;  //回り込み最大オフセット角度
 
-          if (b.Angle < 0) {
-            tangentlineAngle = wrapAngle180(b.Angle - 90.0);
-          } else {
-            tangentlineAngle = wrapAngle180(b.Angle + 90.0);
-          }
+        const double KD_OFFSET = 0.5;     //回り込みのDゲイン
 
-          // 前側に出た接線を後ろ側へ反転
-          if (tangentlineAngle > -90.0 && tangentlineAngle < 90.0) {
-            tangentlineAngle = wrapAngle180(tangentlineAngle + 180.0);
-          }
+        static double prevErr = 0.0;
+        static unsigned long prevTime = 0;
 
-          double ballW = (cos(b.Angle * DEG_TO_RAD) + 1.0) / 2.0;
-          double tanW  = 1.0 - ((cos(b.Angle * DEG_TO_RAD) + 1.0) / 2.0);  //回り込みベクトル
+        // D項移動平均用
+        const int D_AVG_N = 8;            // D項の移動平均を取るときのサンプル数、少ないと敏感すぎる、多いと反応が遅い、要調整
+        static double derrHist[D_AVG_N] = {0};
+        static int derrIdx = 0;
+        static bool derrFilled = false;
 
-          double tangentline_x = cos(tangentlineAngle * DEG_TO_RAD) * tanW * 3.5;
-          double tangentline_y = sin(tangentlineAngle * DEG_TO_RAD) * tanW * 2.0;
+        if (!ImGoingAround && absA > START_ANGLE) {
+          ImGoingAround = true;
 
-          double ball_x = cos(b.Angle * DEG_TO_RAD) * ballW;
-          double ball_y = sin(b.Angle * DEG_TO_RAD) * ballW;
+          prevErr = absA - START_ANGLE;
+          if (prevErr < 0.0) prevErr = 0.0;
+          prevTime = millis();
 
-          double vx = tangentline_x + ball_x;
-          double vy = tangentline_y + ball_y;
-
-          // -----
-          static double prevErrX = 0.0;
-
-          double errX = vx;
-          double dErrX = errX - prevErrX;
-          prevErrX = errX;
-
-          double kp_x = 0.14;
-          double kd_x = 2.6;
-          double corrX = kp_x * errX + kd_x * dErrX;
-          vx -= corrX;
-          // -----
-          targetAngle = wrapAngle180(atan2(vy, vx) * RAD_TO_DEG);
-        } else {
-          targetAngle = b.Angle;
+          // 回り込み開始時にD履歴リセット
+          for (int i = 0; i < D_AVG_N; i++) derrHist[i] = 0.0;
+          derrIdx = 0;
+          derrFilled = false;
         }
-      }
 
+        if (ImGoingAround && absA < STOP_ANGLE) {
+          ImGoingAround = false;
+        }
+
+        if (ImGoingAround) {
+          double u = (absA - START_ANGLE) / (FULL_ANGLE - START_ANGLE);
+          if (u < 0.0) u = 0.0;
+          if (u > 1.0) u = 1.0;
+
+          // ベースオフセット
+          // オフセット選択
+          double baseoffset = OFFSET_MAX * u;                               //線形オフセット 
+          //double baseoffset = OFFSET_MAX * u * u;                         //2次オフセット(最初は鈍く、だんだん大きくなる) 
+          //double baseoffset = OFFSET_MAX * (1.0 - (1.0 - u) * (1.0 - u)); //2次オフセット(最初は大きく、だんだん鈍くなる) 
+          //double baseoffset = OFFSET_MAX * (3*u*u - 2*u*u*u);             //3次オフセット(最初は鈍く、だんんと大きくなって最後は鈍くなる)
+          if (alpha < 0.0) baseoffset = -baseoffset;
+
+          double err = absA - START_ANGLE;
+          if (err < 0.0) err = 0.0;
+
+          unsigned long now = millis();
+          double dt = (now - prevTime) / 1000.0;
+          if (dt < 0.005) dt = 0.005;
+
+          // 生の微分
+          double derrRaw = (err - prevErr) / dt;
+
+          // 履歴に入れる
+          derrHist[derrIdx] = derrRaw;
+          derrIdx++;
+          if (derrIdx >= D_AVG_N) {
+            derrIdx = 0;
+            derrFilled = true;
+          }
+
+          // 平均
+          int n = derrFilled ? D_AVG_N : derrIdx;
+          if (n < 1) n = 1;
+
+          double derrAvg = 0.0;
+          for (int i = 0; i < n; i++) {
+            derrAvg += derrHist[i];
+          }
+          derrAvg /= n;
+
+          // D項
+          double doffset = KD_OFFSET * derrAvg;
+          if (alpha < 0.0) doffset = -doffset;
+
+          double offset = baseoffset + doffset;
+
+          if (offset >  OFFSET_MAX) offset =  OFFSET_MAX;
+          if (offset < -OFFSET_MAX) offset = -OFFSET_MAX;
+
+          targetAngle = wrapAngle180(alpha + offset);
+
+          prevErr = err;
+          prevTime = now;
+
+          /*
+          //for debug
+          static unsigned long lastDbg = 0;
+          if (now - lastDbg > 50) {
+            lastDbg = now;
+            SerialPC.print("alpha:");
+            SerialPC.print(alpha);
+            SerialPC.print("  base:");
+            SerialPC.print(baseoffset);
+            SerialPC.print("  dRaw:");
+            SerialPC.print(derrRaw);
+            SerialPC.print("  dAvg:");
+            SerialPC.print(derrAvg);
+            SerialPC.print("  offset:");
+            SerialPC.println(offset);
+          }
+          */
+        } else {
+          targetAngle = alpha;
+        }
+
+        display.clearDisplay();
+        lcd_drawarrow(targetAngle);
+        display.display();
+      }
 
       lineAngle = getLineAngle();   //ライン踏んだ時の移動角
       if(lineAngle != -1){
