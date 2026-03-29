@@ -639,7 +639,6 @@ void loop() {
 
     } else {
       // Keeper algorithm(仮)
-      SerialPC.println("[Debug] Game loop");
 
       static bool DashToBall = false;
       static bool ReturnFromDash = false;
@@ -655,8 +654,8 @@ void loop() {
       double targetHeading = 0.0;
       double targetAngle = 0.0;
       bool OnLine = false;
-      static double vx = 0.0;
-      static double vy = 0.0;
+      double vx = 0.0;
+      double vy = 0.0;
 
       Ball b = getBall();
 
@@ -697,9 +696,8 @@ void loop() {
           if (hasLine) {
             OnLine = true;
             if(sidestate == 0 && (millis() - lastsideLineTime) > 10){   //サイドラインを踏んだら0.2秒は戻る
-              speed = basespeed + 80;
               vx = cos(lineAngle * DEG_TO_RAD);
-              vy = 6 * sin(b.Angle * DEG_TO_RAD);
+              vy = 5 * sin(b.Angle * DEG_TO_RAD);
             } else if(sidestate == 1){
               vx = 0.1;
               vy = -1;
@@ -713,7 +711,8 @@ void loop() {
               vy = sin(b.Angle * DEG_TO_RAD);
             }
             targetAngle = wrapAngle180(atan2(vy, vx) * RAD_TO_DEG);
-            speed = basespeed * (0.7 + (0.3 * (linedist / 100.0)));
+
+            speed = basespeed * (0.8 + (0.2 * (linedist / 100.0)));
           }
           else {
             OnLine = false;
