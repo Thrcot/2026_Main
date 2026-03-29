@@ -465,10 +465,11 @@ void loop() {
 
           // ベースオフセット
           // オフセット選択
-          double baseoffset = OFFSET_MAX * u;                               //線形オフセット 
-          //double baseoffset = OFFSET_MAX * u * u;                         //2次オフセット(最初は鈍く、だんだん大きくなる) ←これすき
-          //double baseoffset = OFFSET_MAX * (1.0 - (1.0 - u) * (1.0 - u)); //2次オフセット(最初は大きく、だんだん鈍くなる) 
-          //double baseoffset = OFFSET_MAX * (3*u*u - 2*u*u*u);             //3次オフセット(最初は鈍く、だんんと大きくなって最後は鈍くなる)
+          //double baseoffset = OFFSET_MAX * u;                             //線形オフセット ←ありかも
+          double baseoffset = OFFSET_MAX * u * u;                           //2次オフセット(最初は鈍く、だんだん大きくなる) ←これすき
+          //double baseoffset = OFFSET_MAX * (1.0 - (1.0 - u) * (1.0 - u)); //2次オフセット(最初は大きく、だんだん鈍くなる) ←なす
+          //double baseoffset = OFFSET_MAX * u * u * u;                       //3次オフセット(最初は鈍く、だんだん大きくなる)　←なす
+          //double baseoffset = OFFSET_MAX * (3*u*u - 2*u*u*u);             //3次オフセット(最初は鈍く、だんんと大きくなって最後は鈍くなる) ←なす
           if (alpha < 0.0) baseoffset = -baseoffset;
 
           double err = absA - START_ANGLE;
